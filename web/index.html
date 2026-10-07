@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Leadgenerator BW</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Leadgenerator <span>Baden-Württemberg</span></h1>
+  <nav id="tabs">
+    <button data-tab="search" class="active">Firmensuche</button>
+    <button data-tab="new">Neugründungen</button>
+    <button data-tab="news">News-Radar</button>
+    <button data-tab="pipeline">Meine Pipeline</button>
+  </nav>
+</header>
+
+<div class="layout">
+  <aside>
+    <section class="only-search only-new only-news">
+      <label for="kreis">Stadt-/Landkreis</label>
+      <select id="kreis"></select>
+      <div class="stand" id="stand"></div>
+    </section>
+
+    <section class="only-search only-new">
+      <div class="row-between">
+        <label>Branchen</label>
+        <span class="links"><a href="#" id="cats-all">alle</a> · <a href="#" id="cats-none">keine</a></span>
+      </div>
+      <div id="cats" class="checklist"></div>
+    </section>
+
+    <section class="only-new">
+      <label for="months">Zeitraum Neugründungen</label>
+      <select id="months">
+        <option value="3">letzte 3 Monate</option>
+        <option value="6" selected>letzte 6 Monate</option>
+        <option value="12">letzte 12 Monate</option>
+        <option value="24">letzte 24 Monate</option>
+      </select>
+    </section>
+
+    <section class="only-news">
+      <label>Themen</label>
+      <div id="topics" class="checklist"></div>
+    </section>
+
+    <section class="only-search only-new only-pipeline">
+      <label>Filter</label>
+      <label class="check only-search only-new"><input type="checkbox" id="hide-chains" checked> Ketten/Filialen ausblenden</label>
+      <label class="check only-search only-new"><input type="checkbox" id="need-contact"> nur mit Telefon/E-Mail/Website</label>
+      <label for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
+      <input type="range" id="min-score" min="0" max="100" step="5" value="0">
+      <input type="search" id="text" placeholder="Name, Ort, Straße …">
+      <select id="status-filter" class="only-pipeline"><option value="">Alle Status</option></select>
+    </section>
+
+    <section class="only-pipeline">
+      <label>Sicherung</label>
+      <p class="hint">Status und Notizen werden nur in diesem Browser gespeichert. Sichere sie ab und zu als Datei.</p>
+      <div class="backup">
+        <button id="backup-save">Sicherung speichern</button>
+        <label class="btn" for="backup-load">Sicherung laden</label>
+        <input type="file" id="backup-load" accept=".json,application/json" hidden>
+      </div>
+    </section>
+
+    <p class="hint">Daten: OpenStreetMap (Firmen) und Google News (Meldungen). Automatisch aktualisiert jeden Montag und Donnerstag.</p>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <div id="summary">Lade Daten …</div>
+      <div class="actions">
+        <button id="toggle-map">Karte</button>
+        <button id="export">CSV-Export</button>
+      </div>
+    </div>
+    <div id="map" hidden></div>
+    <div id="status-msg" hidden></div>
+    <div id="results"></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

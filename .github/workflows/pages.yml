@@ -1,0 +1,44 @@
+name: Daten sammeln & Webseite veröffentlichen
+
+on:
+  push:
+    branches: [claude/bw-sales-prospect-tool-bys459]
+  schedule:
+    - cron: "17 4 * * 1,4"   # Montag + Donnerstag früh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests
+        run: python -m unittest discover -s tests
+      - name: Firmen, Neugründungen und News für alle Kreise sammeln
+        run: python -m leadgen.webexport --out site --previous https://markus90ms-eng.github.io/Leadgenerator
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

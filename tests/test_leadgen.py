@@ -132,6 +132,27 @@ class NewsTest(unittest.TestCase):
         self.assertIn("when%3A30d", url)
 
 
+class WebExportTest(unittest.TestCase):
+    def test_export_and_first_seen(self):
+        from leadgen import webexport
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "site")
+            real = news.search_news
+            prev = {"leads": [{"id": "osm:node/1", "first_seen": ""}]}
+            with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE), \
+                    mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
+                    mock.patch.object(webexport, "fetch_previous", lambda base, path: prev if "kreis" in path else None):
+                self.assertEqual(webexport.main(["--out", out, "--kreis", "08115", "--pause", "0"]), 0)
+            with open(os.path.join(out, "data/kreis/08115.json"), encoding="utf-8") as fh:
+                leads = {l["name"]: l for l in json.load(fh)["leads"]}
+            self.assertNotIn("first_seen", leads["Autohaus Müller"])  # schon bekannt
+            self.assertTrue(leads["Pasta Nova"]["first_seen"])  # neu seit letztem Lauf
+            self.assertTrue(os.path.exists(os.path.join(out, "index.html")))
+            with open(os.path.join(out, "data/meta.json"), encoding="utf-8") as fh:
+                self.assertEqual(json.load(fh)["status"]["08115"]["count"], 4)
+
+
 class ServerTest(unittest.TestCase):
     def test_api_roundtrip(self):
         import app

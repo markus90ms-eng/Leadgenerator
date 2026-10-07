@@ -10,7 +10,17 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 - **CSV-Export** (Excel-tauglich) für CRM/Salesforce
 - **Karte** mit allen Treffern
 
-## Installation & Start
+## Web-Version (ohne Installation)
+
+**https://markus90ms-eng.github.io/Leadgenerator/**
+
+Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Montag und Donnerstag (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
+
+Status und Notizen der Pipeline werden im Browser gespeichert; über *Meine Pipeline → Sicherung speichern* lassen sie sich als Datei sichern.
+
+Einmalige Einrichtung: *Settings → Pages → Build and deployment → Source: GitHub Actions*.
+
+## Lokale Version: Installation & Start
 
 Benötigt nur **Python 3.9+** (keine weiteren Pakete).
 
