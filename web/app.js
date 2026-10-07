@@ -81,7 +81,7 @@ async function init() {
     state.meta = await getJson("data/meta.json");
   } catch (err) {
     $("#summary").textContent = "";
-    return message("Die Daten werden gerade zum ersten Mal gesammelt. Das dauert etwa eine Stunde – bitte später neu laden.");
+    return message("Die Daten werden gerade zum ersten Mal gesammelt. Bitte in etwa 30 Minuten neu laden.");
   }
 
   const kreisSel = $("#kreis");
@@ -147,6 +147,11 @@ async function loadKreis() {
   const info = state.meta.status?.[ags];
   $("#stand").textContent = info?.updated ? `Datenstand: ${fmtDate(info.updated)} · ${info.count} Betriebe` : "";
   if (state.kreisData[ags]) return render();
+  if (!info?.count) {
+    $("#results").innerHTML = "";
+    $("#summary").textContent = "";
+    return message(`Für ${kreisName(ags)} werden die Daten gerade gesammelt. Bitte in 1–2 Stunden nochmal schauen.`);
+  }
   message(`Lade ${kreisName(ags)} …`, true);
   try {
     const [companies, newsFeed] = await Promise.all([

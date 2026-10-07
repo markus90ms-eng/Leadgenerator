@@ -104,7 +104,7 @@ def main(argv=None):
     parser.add_argument("--previous", default="", help="URL der bisher veröffentlichten Seite")
     parser.add_argument("--kreis", nargs="*", default=list(KREISE))
     parser.add_argument("--pause", type=float, default=8.0, help="Sekunden zwischen OSM-Abfragen")
-    parser.add_argument("--max-minutes", type=float, default=110,
+    parser.add_argument("--max-minutes", type=float, default=25,
                         help="Danach keine neuen OSM-Abfragen mehr, restliche Kreise behalten alte Daten")
     args = parser.parse_args(argv)
 
