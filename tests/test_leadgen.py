@@ -170,7 +170,7 @@ class WebExportTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "site")
             real = news.search_news
-            prev = {"leads": [{"id": "osm:node/10", "first_seen": ""}]}
+            prev = {"updated": "2026-01-01", "leads": [{"id": "osm:node/10", "first_seen": ""}]}
             with mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
                     mock.patch.object(webexport, "fetch_previous",
                                       lambda base, path: prev if path == "data/kreis/08115.json" else None):
@@ -184,6 +184,18 @@ class WebExportTest(unittest.TestCase):
                 status = json.load(fh)["status"]
             self.assertEqual(status["08115"]["count"], 3)
             self.assertEqual(status["08111"]["count"], 0)
+
+    def test_first_seen_ignores_empty_or_baseline_data(self):
+        from leadgen.webexport import carry_first_seen
+
+        leads = [{"id": "a"}, {"id": "b"}]
+        # Vorher leerer Stand -> nichts ist "neu"
+        self.assertEqual(carry_first_seen(leads, {"updated": "2026-10-01", "leads": []}, "2026-10-08"), "2026-10-08")
+        self.assertFalse(any(l.get("first_seen") for l in leads))
+        # Alter Stand ohne baseline, in dem alles am selben Tag "neu" war -> zählt als baseline
+        prev = {"updated": "2026-10-07", "leads": [{"id": "a", "first_seen": "2026-10-07"}]}
+        self.assertEqual(carry_first_seen(leads, prev, "2026-10-08"), "2026-10-07")
+        self.assertEqual([l["first_seen"] for l in leads], ["", "2026-10-08"])
 
 
 class ServerTest(unittest.TestCase):

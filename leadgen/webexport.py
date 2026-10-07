@@ -51,12 +51,21 @@ def fetch_previous(base, path):
 
 def carry_first_seen(leads, previous, today):
     """first_seen = Datum, an dem ein Betrieb erstmals im Scan auftauchte.
-    Beim allerersten Lauf bleibt es leer (sonst wäre alles 'neu')."""
-    if not previous:
-        return
-    known = {l["id"]: l.get("first_seen", "") for l in previous.get("leads", [])}
+
+    Alles, was schon beim ersten vollständigen Scan eines Kreises (baseline)
+    da war, gilt nicht als neu. Gibt die baseline zurück."""
+    prev_leads = (previous or {}).get("leads") or []
+    if not prev_leads:
+        for lead in leads:
+            lead.pop("first_seen", None)
+        return today
+    dates = [l["first_seen"] for l in prev_leads if l.get("first_seen")]
+    baseline = previous.get("baseline") or min(dates + [previous.get("updated") or today])
+    known = {l["id"]: l.get("first_seen", "") for l in prev_leads}
     for lead in leads:
-        lead["first_seen"] = known.get(lead["id"], today)
+        seen = known[lead["id"]] if lead["id"] in known else today
+        lead["first_seen"] = seen if seen and seen > baseline else ""
+    return baseline
 
 
 def keep_previous(ags, out, previous):
@@ -109,9 +118,9 @@ def main(argv=None):
         leads = leads_by_kreis.get(ags) or []
         previous = fetch_previous(args.previous, f"data/kreis/{ags}.json")
         if leads:
-            carry_first_seen(leads, previous, today)
+            baseline = carry_first_seen(leads, previous, today)
             write(args.out, f"data/kreis/{ags}.json",
-                  {"kreis": ags, "updated": today, "leads": [compact(l) for l in leads]})
+                  {"kreis": ags, "updated": today, "baseline": baseline, "leads": [compact(l) for l in leads]})
             status[ags] = {"updated": today, "count": len(leads)}
             updated += 1
         else:
