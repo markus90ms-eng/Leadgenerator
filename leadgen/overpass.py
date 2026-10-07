@@ -14,7 +14,7 @@ ENDPOINTS = [
     "https://overpass.kumi.systems/api/interpreter",
 ]
 USER_AGENT = "Leadgenerator-BW/1.0 (Vertriebstool, Kontakt ueber GitHub)"
-TIMEOUT = 180
+TIMEOUT = 150
 
 
 class OverpassError(RuntimeError):
