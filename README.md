@@ -14,7 +14,7 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 
 **https://markus90ms-eng.github.io/Leadgenerator/**
 
-Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch alle 2 Stunden (jeweils die Kreise mit dem ältesten Stand) (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
+Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
 
 Status und Notizen der Pipeline werden im Browser gespeichert; über *Meine Pipeline → Sicherung speichern* lassen sie sich als Datei sichern.
 

@@ -1,10 +1,11 @@
-"""Baut die Web-Version: sammelt Firmen und News für alle Kreise und schreibt
-statische JSON-Dateien plus die Weboberfläche in einen Ausgabeordner.
+"""Baut die Web-Version: liest Betriebe aller Kreise aus dem OSM-Datenabzug
+für Baden-Württemberg, sammelt News und schreibt statische JSON-Dateien plus
+die Weboberfläche in einen Ausgabeordner.
 
-    python -m leadgen.webexport --out site --previous https://<user>.github.io/<repo>
+    python -m leadgen.webexport --out site --pbf bw.osm.pbf --previous https://<user>.github.io/<repo>
 
-Läuft automatisch per GitHub Actions. Fällt eine Abfrage aus, werden die Daten
-des letzten erfolgreichen Laufs (von --previous) weiterverwendet.
+Läuft automatisch per GitHub Actions. Fehlt für einen Kreis etwas, werden die
+Daten des letzten erfolgreichen Laufs (von --previous) weiterverwendet.
 """
 
 import argparse
@@ -12,11 +13,10 @@ import json
 import os
 import shutil
 import sys
-import time
 import urllib.request
 from datetime import date
 
-from . import news, overpass
+from . import news, osmimport
 from .categories import CATEGORIES
 from .regions import KREISE
 
@@ -59,18 +59,6 @@ def carry_first_seen(leads, previous, today):
         lead["first_seen"] = known.get(lead["id"], today)
 
 
-def scan_kreis(ags, out, previous, today):
-    """Eine OSM-Abfrage für den Kreis. Gibt die Anzahl Betriebe zurück oder None bei Fehler."""
-    try:
-        leads = overpass.search(ags, list(CATEGORIES))
-    except Exception as exc:
-        print(f"    OSM-Abfrage fehlgeschlagen: {exc}", flush=True)
-        return None
-    carry_first_seen(leads, previous, today)
-    write(out, f"data/kreis/{ags}.json", {"kreis": ags, "updated": today, "leads": [compact(l) for l in leads]})
-    return len(leads)
-
-
 def keep_previous(ags, out, previous):
     """Kreis ohne neue Daten: Stand vom letzten Lauf weiterverwenden."""
     if not previous:
@@ -101,48 +89,35 @@ def write(out, path, payload):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="site")
+    parser.add_argument("--pbf", default="baden-wuerttemberg-latest.osm.pbf",
+                        help="OSM-Datei; wird von Geofabrik geladen, falls sie fehlt")
     parser.add_argument("--previous", default="", help="URL der bisher veröffentlichten Seite")
-    parser.add_argument("--kreis", nargs="*", default=list(KREISE))
-    parser.add_argument("--pause", type=float, default=8.0, help="Sekunden zwischen OSM-Abfragen")
-    parser.add_argument("--max-minutes", type=float, default=25,
-                        help="Danach keine neuen OSM-Abfragen mehr, restliche Kreise behalten alte Daten")
     args = parser.parse_args(argv)
 
     shutil.rmtree(args.out, ignore_errors=True)
     shutil.copytree(WEB_DIR, args.out)
     today = date.today().isoformat()
-    deadline = time.monotonic() + args.max_minutes * 60
 
-    # Kreise ohne Daten zuerst, dann die mit dem ältesten Datenstand
-    prev_status = (fetch_previous(args.previous, "data/meta.json") or {}).get("status", {})
-    order = sorted(args.kreis, key=lambda a: prev_status.get(a, {}).get("updated") or "")
-    previous = {ags: fetch_previous(args.previous, f"data/kreis/{ags}.json") for ags in order}
-    status = {ags: {"news": 0, **keep_previous(ags, args.out, previous[ags])} for ags in order}
+    if not os.path.exists(args.pbf):
+        print(f"Lade {osmimport.GEOFABRIK_URL} …", flush=True)
+        osmimport.download(args.pbf)
+    print("Lese Betriebe aus OSM-Daten …", flush=True)
+    leads_by_kreis = osmimport.load(args.pbf)
 
-    pending = list(order)
-    for round_no in (1, 2):  # zweite Runde = erneuter Versuch für fehlgeschlagene Kreise
-        failed = []
-        for i, ags in enumerate(pending):
-            if time.monotonic() > deadline:
-                print(f"Zeitlimit erreicht – {len(pending) - i} Kreise behalten ihren alten Stand.", flush=True)
-                failed += pending[i:]
-                break
-            print(f"[Runde {round_no} · {i + 1}/{len(pending)}] {KREISE[ags]['name']}", flush=True)
-            count = scan_kreis(ags, args.out, previous[ags], today)
-            if count is None:
-                failed.append(ags)
-            else:
-                status[ags].update(updated=today, count=count)
-                print(f"    {count} Betriebe", flush=True)
-            time.sleep(args.pause)
-        pending = failed
-        if not pending:
-            break
-        time.sleep(args.pause * 5)
-
-    print("News-Radar …", flush=True)
-    for ags in order:
+    status, updated = {}, 0
+    for ags, kreis in KREISE.items():
+        leads = leads_by_kreis.get(ags) or []
+        previous = fetch_previous(args.previous, f"data/kreis/{ags}.json")
+        if leads:
+            carry_first_seen(leads, previous, today)
+            write(args.out, f"data/kreis/{ags}.json",
+                  {"kreis": ags, "updated": today, "leads": [compact(l) for l in leads]})
+            status[ags] = {"updated": today, "count": len(leads)}
+            updated += 1
+        else:
+            status[ags] = keep_previous(ags, args.out, previous)
         status[ags]["news"] = export_news(ags, args.out, args.previous, today)
+        print(f"{kreis['name']}: {status[ags]['count']} Betriebe, {status[ags]['news']} Meldungen", flush=True)
 
     write(args.out, "data/meta.json", {
         "generated": today,
@@ -151,9 +126,8 @@ def main(argv=None):
         "topics": news.TOPIC_LABELS,
         "status": status,
     })
-    print(f"Fertig. {len(order) - len(pending)}/{len(order)} Kreise aktualisiert.")
-    # Nur abbrechen, wenn gar nichts geklappt hat
-    return 1 if len(pending) == len(order) else 0
+    print(f"Fertig. {updated}/{len(KREISE)} Kreise aktualisiert.")
+    return 0 if updated else 1
 
 
 if __name__ == "__main__":

@@ -150,7 +150,7 @@ async function loadKreis() {
   if (!info?.count) {
     $("#results").innerHTML = "";
     $("#summary").textContent = "";
-    return message(`Für ${kreisName(ags)} werden die Daten gerade gesammelt. Bitte in 1–2 Stunden nochmal schauen.`);
+    return message(`Für ${kreisName(ags)} liegen noch keine Daten vor. Die nächste Aktualisierung läuft automatisch.`);
   }
   message(`Lade ${kreisName(ags)} …`, true);
   try {

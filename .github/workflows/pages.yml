@@ -4,7 +4,7 @@ on:
   push:
     branches: [claude/bw-sales-prospect-tool-bys459]
   schedule:
-    - cron: "17 */2 * * *"   # alle 2 Stunden, jeweils die Kreise mit dem ältesten Stand
+    - cron: "17 4 * * *"   # täglich früh, nach dem nächtlichen Geofabrik-Update
   workflow_dispatch:
 
 permissions:
@@ -25,10 +25,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Pakete installieren
+        run: pip install osmium shapely
       - name: Tests
         run: python -m unittest discover -s tests
       - name: Firmen, Neugründungen und News für alle Kreise sammeln
-        run: python -m leadgen.webexport --out site --previous https://markus90ms-eng.github.io/Leadgenerator
+        run: python -m leadgen.webexport --out site --pbf bw.osm.pbf --previous https://markus90ms-eng.github.io/Leadgenerator
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

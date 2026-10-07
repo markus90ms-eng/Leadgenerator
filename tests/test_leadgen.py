@@ -132,25 +132,58 @@ class NewsTest(unittest.TestCase):
         self.assertIn("when%3A30d", url)
 
 
+try:
+    import osmium  # noqa: F401
+    import shapely  # noqa: F401
+    HAS_OSMIUM = True
+except ImportError:
+    HAS_OSMIUM = False
+
+MINI_OSM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "mini.osm")
+
+
+@unittest.skipUnless(HAS_OSMIUM, "osmium/shapely nicht installiert")
 class WebExportTest(unittest.TestCase):
+    def test_osm_import_assigns_kreis(self):
+        from leadgen import osmimport
+
+        leads = osmimport.load(MINI_OSM)
+        names = {l["name"]: l for l in leads["08115"]}
+        self.assertEqual(set(names), {"Autohaus Müller", "FitBox", "Pasta Nova"})  # ohne "Außerhalb" und Bank
+        self.assertEqual(names["Pasta Nova"]["id"], "osm:way/200")
+        self.assertEqual(names["FitBox"]["start_date"], "2026-09-01")
+        self.assertEqual(names["Autohaus Müller"]["osm_version"], 3)
+
+    def test_match_kreis(self):
+        from leadgen.osmimport import match_kreis
+
+        base = {"boundary": "administrative", "admin_level": "6"}
+        self.assertEqual(match_kreis({**base, "de:amtlicher_gemeindeschluessel": "08115"}), "08115")
+        self.assertEqual(match_kreis({**base, "de:amtlicher_gemeindeschluessel": "08212000"}), "08212")
+        self.assertEqual(match_kreis({**base, "de:regionalschluessel": "084360000000"}), "08436")
+        self.assertEqual(match_kreis({**base, "name": "Ortenaukreis"}), "08317")
+        self.assertIsNone(match_kreis({**base, "admin_level": "8", "de:amtlicher_gemeindeschluessel": "08115003"}))
+
     def test_export_and_first_seen(self):
         from leadgen import webexport
 
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "site")
             real = news.search_news
-            prev = {"leads": [{"id": "osm:node/1", "first_seen": ""}]}
-            with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE), \
-                    mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
-                    mock.patch.object(webexport, "fetch_previous", lambda base, path: prev if "kreis" in path else None):
-                self.assertEqual(webexport.main(["--out", out, "--kreis", "08115", "--pause", "0"]), 0)
+            prev = {"leads": [{"id": "osm:node/10", "first_seen": ""}]}
+            with mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
+                    mock.patch.object(webexport, "fetch_previous",
+                                      lambda base, path: prev if path == "data/kreis/08115.json" else None):
+                self.assertEqual(webexport.main(["--out", out, "--pbf", MINI_OSM, "--previous", "x"]), 0)
             with open(os.path.join(out, "data/kreis/08115.json"), encoding="utf-8") as fh:
                 leads = {l["name"]: l for l in json.load(fh)["leads"]}
             self.assertNotIn("first_seen", leads["Autohaus Müller"])  # schon bekannt
             self.assertTrue(leads["Pasta Nova"]["first_seen"])  # neu seit letztem Lauf
             self.assertTrue(os.path.exists(os.path.join(out, "index.html")))
             with open(os.path.join(out, "data/meta.json"), encoding="utf-8") as fh:
-                self.assertEqual(json.load(fh)["status"]["08115"]["count"], 4)
+                status = json.load(fh)["status"]
+            self.assertEqual(status["08115"]["count"], 3)
+            self.assertEqual(status["08111"]["count"], 0)
 
 
 class ServerTest(unittest.TestCase):

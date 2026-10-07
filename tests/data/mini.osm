@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <node id="1" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.60" lon="8.90"/>
+  <node id="2" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.60" lon="9.10"/>
+  <node id="3" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.80" lon="9.10"/>
+  <node id="4" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.80" lon="8.90"/>
+  <node id="10" version="3" timestamp="2021-05-01T00:00:00Z" lat="48.68" lon="9.01">
+    <tag k="name" v="Autohaus Müller"/><tag k="shop" v="car"/><tag k="phone" v="+49 7031 12345"/>
+    <tag k="addr:street" v="Hauptstr."/><tag k="addr:housenumber" v="5"/><tag k="addr:postcode" v="71034"/><tag k="addr:city" v="Böblingen"/>
+  </node>
+  <node id="11" version="1" timestamp="2026-09-20T10:00:00Z" lat="48.70" lon="9.00">
+    <tag k="name" v="FitBox"/><tag k="leisure" v="fitness_centre"/><tag k="start_date" v="2026-09"/>
+  </node>
+  <node id="12" version="1" timestamp="2026-09-20T10:00:00Z" lat="49.50" lon="9.50">
+    <tag k="name" v="Außerhalb"/><tag k="amenity" v="restaurant"/>
+  </node>
+  <node id="13" version="1" timestamp="2026-09-20T10:00:00Z" lat="48.70" lon="9.05">
+    <tag k="amenity" v="bench"/><tag k="name" v="Bank"/>
+  </node>
+  <node id="20" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.70" lon="8.95"/>
+  <node id="21" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.70" lon="8.96"/>
+  <node id="22" version="1" timestamp="2020-01-01T00:00:00Z" lat="48.71" lon="8.96"/>
+  <way id="100" version="1" timestamp="2020-01-01T00:00:00Z">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/>
+  </way>
+  <way id="200" version="1" timestamp="2026-09-01T00:00:00Z">
+    <nd ref="20"/><nd ref="21"/><nd ref="22"/><nd ref="20"/>
+    <tag k="name" v="Pasta Nova"/><tag k="amenity" v="restaurant"/><tag k="building" v="yes"/>
+  </way>
+  <relation id="500" version="1" timestamp="2020-01-01T00:00:00Z">
+    <member type="way" ref="100" role="outer"/>
+    <tag k="type" v="boundary"/><tag k="boundary" v="administrative"/><tag k="admin_level" v="6"/>
+    <tag k="name" v="Landkreis Böblingen"/><tag k="de:amtlicher_gemeindeschluessel" v="08115"/>
+  </relation>
+</osm>
