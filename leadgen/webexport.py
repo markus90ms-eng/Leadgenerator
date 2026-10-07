@@ -59,26 +59,24 @@ def carry_first_seen(leads, previous, today):
         lead["first_seen"] = known.get(lead["id"], today)
 
 
-def export_kreis(ags, out, previous_base, today, retries=2, skip=False):
-    path = f"data/kreis/{ags}.json"
-    previous = fetch_previous(previous_base, path)
-    for attempt in range(0 if skip else retries):
-        try:
-            leads = overpass.search(ags, list(CATEGORIES))
-            break
-        except Exception as exc:
-            print(f"    Versuch {attempt + 1} fehlgeschlagen: {exc}", flush=True)
-            time.sleep(30 * (attempt + 1))
-    else:
-        if previous:
-            print("    -> verwende Daten vom letzten Lauf", flush=True)
-            write(out, path, previous)
-            return previous.get("updated", ""), len(previous.get("leads", [])), False
-        return "", 0, False
+def scan_kreis(ags, out, previous, today):
+    """Eine OSM-Abfrage für den Kreis. Gibt die Anzahl Betriebe zurück oder None bei Fehler."""
+    try:
+        leads = overpass.search(ags, list(CATEGORIES))
+    except Exception as exc:
+        print(f"    OSM-Abfrage fehlgeschlagen: {exc}", flush=True)
+        return None
     carry_first_seen(leads, previous, today)
-    payload = {"kreis": ags, "updated": today, "leads": [compact(l) for l in leads]}
-    write(out, path, payload)
-    return today, len(leads), True
+    write(out, f"data/kreis/{ags}.json", {"kreis": ags, "updated": today, "leads": [compact(l) for l in leads]})
+    return len(leads)
+
+
+def keep_previous(ags, out, previous):
+    """Kreis ohne neue Daten: Stand vom letzten Lauf weiterverwenden."""
+    if not previous:
+        return {"updated": "", "count": 0}
+    write(out, f"data/kreis/{ags}.json", previous)
+    return {"updated": previous.get("updated", ""), "count": len(previous.get("leads", []))}
 
 
 def export_news(ags, out, previous_base, today):
@@ -106,27 +104,45 @@ def main(argv=None):
     parser.add_argument("--previous", default="", help="URL der bisher veröffentlichten Seite")
     parser.add_argument("--kreis", nargs="*", default=list(KREISE))
     parser.add_argument("--pause", type=float, default=8.0, help="Sekunden zwischen OSM-Abfragen")
-    parser.add_argument("--max-minutes", type=float, default=100,
+    parser.add_argument("--max-minutes", type=float, default=110,
                         help="Danach keine neuen OSM-Abfragen mehr, restliche Kreise behalten alte Daten")
     args = parser.parse_args(argv)
 
     shutil.rmtree(args.out, ignore_errors=True)
     shutil.copytree(WEB_DIR, args.out)
     today = date.today().isoformat()
-    status, failed = {}, 0
     deadline = time.monotonic() + args.max_minutes * 60
-    for i, ags in enumerate(args.kreis):
-        print(f"[{i + 1}/{len(args.kreis)}] {KREISE[ags]['name']}", flush=True)
-        skip = time.monotonic() > deadline
-        if skip:
-            print("    Zeitlimit erreicht -> keine neue Abfrage", flush=True)
-        updated, count, ok = export_kreis(ags, args.out, args.previous, today, skip=skip)
-        failed += not ok
-        news_count = export_news(ags, args.out, args.previous, today)
-        print(f"    {count} Betriebe, {news_count} Meldungen", flush=True)
-        status[ags] = {"updated": updated, "count": count, "news": news_count}
-        if not skip:
+
+    # Kreise ohne Daten zuerst, dann die mit dem ältesten Datenstand
+    prev_status = (fetch_previous(args.previous, "data/meta.json") or {}).get("status", {})
+    order = sorted(args.kreis, key=lambda a: prev_status.get(a, {}).get("updated") or "")
+    previous = {ags: fetch_previous(args.previous, f"data/kreis/{ags}.json") for ags in order}
+    status = {ags: {"news": 0, **keep_previous(ags, args.out, previous[ags])} for ags in order}
+
+    pending = list(order)
+    for round_no in (1, 2):  # zweite Runde = erneuter Versuch für fehlgeschlagene Kreise
+        failed = []
+        for i, ags in enumerate(pending):
+            if time.monotonic() > deadline:
+                print(f"Zeitlimit erreicht – {len(pending) - i} Kreise behalten ihren alten Stand.", flush=True)
+                failed += pending[i:]
+                break
+            print(f"[Runde {round_no} · {i + 1}/{len(pending)}] {KREISE[ags]['name']}", flush=True)
+            count = scan_kreis(ags, args.out, previous[ags], today)
+            if count is None:
+                failed.append(ags)
+            else:
+                status[ags].update(updated=today, count=count)
+                print(f"    {count} Betriebe", flush=True)
             time.sleep(args.pause)
+        pending = failed
+        if not pending:
+            break
+        time.sleep(args.pause * 5)
+
+    print("News-Radar …", flush=True)
+    for ags in order:
+        status[ags]["news"] = export_news(ags, args.out, args.previous, today)
 
     write(args.out, "data/meta.json", {
         "generated": today,
@@ -135,9 +151,9 @@ def main(argv=None):
         "topics": news.TOPIC_LABELS,
         "status": status,
     })
-    print(f"Fertig. {len(args.kreis) - failed}/{len(args.kreis)} Kreise aktualisiert.")
+    print(f"Fertig. {len(order) - len(pending)}/{len(order)} Kreise aktualisiert.")
     # Nur abbrechen, wenn gar nichts geklappt hat
-    return 1 if failed == len(args.kreis) else 0
+    return 1 if len(pending) == len(order) else 0
 
 
 if __name__ == "__main__":

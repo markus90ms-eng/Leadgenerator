@@ -4,7 +4,7 @@ on:
   push:
     branches: [claude/bw-sales-prospect-tool-bys459]
   schedule:
-    - cron: "17 4 * * 1,4"   # Montag + Donnerstag früh
+    - cron: "17 3 * * *"   # täglich früh
   workflow_dispatch:
 
 permissions:
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 170
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
