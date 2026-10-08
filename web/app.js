@@ -172,6 +172,56 @@ function fitNearBoxes() {
 }
 window.addEventListener("resize", fitNearBoxes);
 
+// ---------- Telefonpitch mit Claude --------------------------------------
+const PITCH_LEITFADEN = (stadt) => `„Guten Tag Frau/Herr …, mein Name ist Markus Schultheiß, ich rufe an im Namen der Ströer AG. ` +
+  `Wir haben den Stadtvertrag mit der Stadt ${stadt}. Sie kennen doch bestimmt die großen Plakatflächen an den Straßen ` +
+  `oder auch an den Bushaltestellen. Diese sind von uns. Wir sind in Mitverantwortung gezogen worden, dass wir nicht nur ` +
+  `die großen Konzerne bevorzugen, sondern auch den Klein- und Mittelstand fördern. Darum vergeben wir die Plätze neu ` +
+  `und suchen derzeit in Ihrer Branche nach einem Partner, mit dem wir in Zukunft zusammenarbeiten können …“`;
+
+function leadCity(l) {
+  if (l.city) return l.city;
+  const m = (l.address || "").match(/\d{5}\s+(.+)$/);
+  return m ? m[1] : kreisName(l.kreis).replace(/^Landkreis\s+|\s*\(Stadtkreis\)$/g, "");
+}
+
+function pitchPrompt(l) {
+  const stadt = leadCity(l);
+  const flaechen = l.near?.count
+    ? l.near.items.slice(0, 6).map((i) => `${mediaName(i.typ)}, ${i.standort}, ${i.plz} ${i.ort} (${i.dist} m, SDAW ${i.id})`).join("; ")
+    : `keine Ströer-Fläche im Umkreis von ${$("#radius").selectedOptions[0].text}`;
+  const facts = [
+    `Firma: ${l.name}`,
+    `Branche: ${catName(l.category)}${l.kind ? ` (${l.kind})` : ""}`,
+    l.address ? `Adresse: ${l.address}` : `Ort: ${stadt}`,
+    `Website: ${l.website || "keine bekannt – bitte im Web nach der Firma suchen"}`,
+    l.phone ? `Telefon: ${l.phone}` : "",
+    `Ströer-Flächen in der Nähe: ${flaechen}`,
+    l.new_reason ? `Besonderheit: ${l.new_reason}${l.start_date ? " (" + fmtDate(l.start_date) + ")" : ""}` : "",
+  ].filter(Boolean).join("\n");
+  return `Du bist mein Vertriebsassistent. Ich bin Markus Schultheiß, Ströer AG, und rufe gleich bei folgendem Unternehmen an:
+
+${facts}
+
+Aufgabe:
+1. Sieh dir die Website an und fasse in 3 Stichpunkten zusammen: Was bietet die Firma, was ist aktuell (Aktionen, neue Produkte, Stellenanzeigen), wen spricht sie an?
+2. Empfiehl, welche der Flächen in der Nähe am besten passt (klassisch oder digital) und warum.
+3. Schreib einen Telefonpitch nach meinem Leitfaden, angepasst an diese Firma:
+${PITCH_LEITFADEN(stadt)}
+Baue 1–2 konkrete Bezüge zur Website ein und ende mit einer Terminfrage.
+4. Nenne die 3 wahrscheinlichsten Einwände (z. B. „kein Budget“, „machen nur Online“) mit kurzer Antwort.
+
+Kurz und gesprochen formulieren, kein Fließtext-Roman.`;
+}
+
+function openPitch(l) {
+  const prompt = pitchPrompt(l);
+  // In die Zwischenablage, falls claude.ai das Feld nicht vorbelegt
+  navigator.clipboard?.writeText(prompt).catch(() => {});
+  window.open("https://claude.ai/new?q=" + encodeURIComponent(prompt), "_blank", "noopener");
+  message(`Pitch-Anfrage für ${l.name} an Claude übergeben und in die Zwischenablage kopiert. Falls das Eingabefeld leer ist: Cmd+V (Windows: Strg+V).`, true);
+}
+
 const gmaps = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 
 // Aufgeklappte Liste der Flächen unter einem Betrieb
@@ -397,6 +447,7 @@ function render() {
     state.openNear.has(id) ? state.openNear.delete(id) : state.openNear.add(id);
     render();
   }));
+  document.querySelectorAll("button[data-pitch]").forEach((b) => (b.onclick = () => openPitch(byId[b.dataset.pitch])));
   document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
   document.querySelectorAll("textarea[data-id]").forEach((t) => (t.onchange = () => save(byId[t.dataset.id], { notes: t.value })));
@@ -430,6 +481,7 @@ function rowHtml(l) {
     <td><select data-id="${esc(l.id)}" aria-label="Status">${statusOpts}</select></td>
     <td><textarea data-id="${esc(l.id)}" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
     <td class="contact">
+      <button class="pitch-btn" data-pitch="${esc(l.id)}" title="Individuellen Telefonpitch mit Claude erstellen">Pitch</button>
       <a href="${google}" target="_blank" rel="noopener">Google</a>
       ${osm ? `<a href="${osm}" target="_blank" rel="noopener">Karte</a>` : ""}
       ${l.source_link ? `<a href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}

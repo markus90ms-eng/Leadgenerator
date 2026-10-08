@@ -101,3 +101,5 @@ tr.near-detail td { background: #f7f9fc; padding: 0; }
 .badge.classic { background: #fdece3; color: #b23c08; }
 @media (max-width: 700px) { .near-list li { grid-template-columns: 56px 1fr; } .near-list .where, .near-list .links { grid-column: 1 / -1; } }
 #map { scroll-margin-top: 80px; }
+.pitch-btn { display: block; margin-bottom: 4px; padding: 4px 10px; font-size: 13px; font-weight: 600; color: var(--accent); border-color: var(--accent); background: var(--accent-soft); white-space: nowrap; }
+.pitch-btn:hover { background: var(--accent); color: #fff; }
