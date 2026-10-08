@@ -173,8 +173,8 @@ function fitNearBoxes() {
 window.addEventListener("resize", fitNearBoxes);
 
 // ---------- Telefonpitch mit Claude --------------------------------------
-const PITCH_LEITFADEN = (stadt) => `„Guten Tag Frau/Herr …, mein Name ist Markus Schultheiß, ich rufe an im Namen der Ströer AG. ` +
-  `Wir haben den Stadtvertrag mit der Stadt ${stadt}. Sie kennen doch bestimmt die großen Plakatflächen an den Straßen ` +
+const PITCH_LEITFADEN = (vertragspartner) => `„Guten Tag Frau/Herr …, mein Name ist Markus Schultheiß, ich rufe an im Namen der Ströer AG. ` +
+  `Wir haben den Stadtvertrag mit ${vertragspartner}. Sie kennen doch bestimmt die großen Plakatflächen an den Straßen ` +
   `oder auch an den Bushaltestellen. Diese sind von uns. Wir sind in Mitverantwortung gezogen worden, dass wir nicht nur ` +
   `die großen Konzerne bevorzugen, sondern auch den Klein- und Mittelstand fördern. Darum vergeben wir die Plätze neu ` +
   `und suchen derzeit in Ihrer Branche nach einem Partner, mit dem wir in Zukunft zusammenarbeiten können …“`;
@@ -183,6 +183,13 @@ function leadCity(l) {
   if (l.city) return l.city;
   const m = (l.address || "").match(/\d{5}\s+(.+)$/);
   return m ? m[1] : kreisName(l.kreis).replace(/^Landkreis\s+|\s*\(Stadtkreis\)$/g, "");
+}
+
+// Vertragspartner ist der Kreis: "dem Landkreis Esslingen", "dem Rems-Murr-Kreis", "der Stadt Stuttgart"
+function vertragspartner(ags) {
+  const k = state.meta.kreise.find((x) => x.ags === ags);
+  if (!k) return "dem Landkreis";
+  return k.typ === "Stadtkreis" ? `der Stadt ${k.osm_name}` : `dem ${k.name}`;
 }
 
 function pitchPrompt(l) {
@@ -207,7 +214,7 @@ Aufgabe:
 1. Sieh dir die Website an und fasse in 3 Stichpunkten zusammen: Was bietet die Firma, was ist aktuell (Aktionen, neue Produkte, Stellenanzeigen), wen spricht sie an?
 2. Empfiehl, welche der Flächen in der Nähe am besten passt (klassisch oder digital) und warum.
 3. Schreib einen Telefonpitch nach meinem Leitfaden, angepasst an diese Firma:
-${PITCH_LEITFADEN(stadt)}
+${PITCH_LEITFADEN(vertragspartner(l.kreis))}
 Baue 1–2 konkrete Bezüge zur Website ein und ende mit einer Terminfrage.
 4. Nenne die 3 wahrscheinlichsten Einwände (z. B. „kein Budget“, „machen nur Online“) mit kurzer Antwort.
 
