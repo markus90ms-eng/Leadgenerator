@@ -10,6 +10,8 @@ const state = {
   openNear: new Set(), // Betriebe, deren Flächenliste aufgeklappt ist
   focus: null,     // Betrieb, auf den die Karte gerade zoomt
   pipeline: {},    // id -> {status, notes, updated, lead}
+  eigene: {},      // id -> eigener Lead aus Foto (mit Vorschaubild)
+  queue: [],       // Fotos, die gerade erkannt/geprüft werden
   sort: { key: "score", dir: -1 },
   limit: 200,
   map: null,
@@ -204,6 +206,7 @@ function pitchPrompt(l) {
     `Website: ${l.website || "keine bekannt – bitte im Web nach der Firma suchen"}`,
     l.phone ? `Telefon: ${l.phone}` : "",
     `Ströer-Flächen in der Nähe: ${flaechen}`,
+    l.photo ? `Gesehen: eigene Beobachtung (Werbung auf Fahrzeug/Schild)${l.ocr ? ` – Text auf dem Foto: „${l.ocr.replace(/\s+/g, " ").slice(0, 300)}“` : ""}` : "",
     l.new_reason ? `Besonderheit: ${l.new_reason}${l.start_date ? " (" + fmtDate(l.start_date) + ")" : ""}` : "",
   ].filter(Boolean).join("\n");
   return `Du bist mein Vertriebsassistent. Ich bin Markus Schultheiß, Ströer AG, und rufe gleich bei folgendem Unternehmen an:
@@ -260,6 +263,7 @@ function focusOnMap(l) {
 // ---------- Setup ---------------------------------------------------------
 async function init() {
   state.pipeline = load("pipeline", {});
+  initEigene();
   try {
     state.meta = await getJson("data/meta.json");
   } catch (err) {
@@ -310,7 +314,7 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["search", "new", "news", "pipeline"].includes(startTab) ? startTab : "search");
+  switchTab(["search", "new", "news", "pipeline", "eigene"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
@@ -333,7 +337,9 @@ function switchTab(tab) {
   });
   $("#export").hidden = tab === "news";
   $("#toggle-map").hidden = tab === "news";
+  renderQueue();
   render();
+  if (tab === "eigene") ensureOwnKreise().then(() => state.tab === "eigene" && render());
 }
 
 async function loadKreis() {
@@ -374,6 +380,7 @@ function message(text, loading = false) {
 
 // ---------- Filter & Darstellung -----------------------------------------
 function currentRows() {
+  if (state.tab === "eigene") return Object.values(state.eigene).map((l) => enrich(l, monthsAgo(12)));
   if (state.tab === "pipeline") {
     return Object.entries(state.pipeline).map(([id, p]) => enrich({ ...p.lead, id }, monthsAgo(12)));
   }
@@ -394,11 +401,11 @@ function filtered(rows) {
   const minScore = +$("#min-score").value;
   const text = $("#text").value.trim().toLowerCase();
   const status = $("#status-filter").value;
-  const pipe = state.tab === "pipeline";
+  const pipe = state.tab === "pipeline" || state.tab === "eigene";
   const out = rows.filter((l) =>
     (pipe || !$("#hide-chains").checked || !l.chain) &&
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
-    (!pipe || !status || l.status === status) &&
+    (state.tab !== "pipeline" || !status || l.status === status) &&
     (!$("#only-near").checked || l.near_count > 0) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
@@ -416,7 +423,11 @@ function render() {
   const rows = filtered(all);
   state.visible = rows;
   const neu = rows.filter((r) => r.new_reason).length;
-  if (state.tab === "pipeline") {
+  if (state.tab === "eigene") {
+    $("#summary").innerHTML = all.length
+      ? `<b>${rows.length}</b> eigene Leads`
+      : "Noch keine eigenen Leads. Über „Fotos auswählen“ Bilder von Fahrzeug- oder Schildwerbung hochladen.";
+  } else if (state.tab === "pipeline") {
     $("#summary").innerHTML = all.length
       ? `<b>${rows.length}</b> Leads in deiner Pipeline`
       : "Noch keine Leads gemerkt. Setze in der Firmensuche einen Status oder eine Notiz.";
@@ -454,6 +465,7 @@ function render() {
     state.openNear.has(id) ? state.openNear.delete(id) : state.openNear.add(id);
     render();
   }));
+  document.querySelectorAll("button[data-del]").forEach((b) => (b.onclick = () => deleteOwn(b.dataset.del)));
   document.querySelectorAll("button[data-pitch]").forEach((b) => (b.onclick = () => openPitch(byId[b.dataset.pitch])));
   document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
@@ -465,6 +477,7 @@ function rowHtml(l) {
   const scoreCls = l.score >= 60 ? "high" : l.score < 35 ? "low" : "";
   const badges = [
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
+    l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
     l.chain ? `<span class="badge chain">Kette${l.brand ? ": " + esc(l.brand) : ""}</span>` : "",
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
@@ -475,11 +488,12 @@ function rowHtml(l) {
   ].join("") || `<span class="sub">–</span>`;
   const statusOpts = STATUSES.map((s) => `<option value="${s}" ${l.status === s ? "selected" : ""}>${STATUS_LABELS[s]}</option>`).join("");
   const google = `https://www.google.com/search?q=${encodeURIComponent(`${l.name} ${l.city || l.address || kreisName(l.kreis)}`)}`;
-  const osm = l.id.startsWith("osm:") ? `https://www.openstreetmap.org/${l.id.slice(4)}` : "";
+  const osmId = l.match || l.id;
+  const osm = osmId.startsWith("osm:") ? `https://www.openstreetmap.org/${osmId.slice(4)}` : "";
   return `<tr>
     <td><span class="score ${scoreCls}" title="${esc(l.score_reasons.join("\n"))}">${l.score}</span></td>
-    <td class="name">${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
-    <td>${esc(catName(l.category))}${state.tab === "pipeline" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
+    <td class="name">${l.photo ? `<img class="thumb" src="${l.photo}" alt="">` : ""}${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
+    <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
     <td class="contact">${contact}</td>
     <td class="near">${l.near?.count
@@ -492,18 +506,19 @@ function rowHtml(l) {
       <a href="${google}" target="_blank" rel="noopener">Google</a>
       ${osm ? `<a href="${osm}" target="_blank" rel="noopener">Karte</a>` : ""}
       ${l.source_link ? `<a href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}
+      ${state.tab === "eigene" ? `<button class="del-btn" data-del="${esc(l.id)}" title="Eigenen Lead löschen">Löschen</button>` : ""}
     </td>
   </tr>`;
 }
 
 function save(lead, patch) {
-  const { new_reason, score, score_reasons, status, notes, near, near_count, ...raw } = lead;
+  const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, ...raw } = lead;
   const entry = state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
   Object.assign(entry, patch, { updated: new Date().toISOString() });
   if (entry.status === "neu" && !entry.notes) delete state.pipeline[lead.id];
   else state.pipeline[lead.id] = entry;
   store("pipeline", state.pipeline);
-  if (state.tab === "pipeline") render();
+  if (state.tab === "pipeline" || state.tab === "eigene") render();
 }
 
 function renderNews() {
@@ -552,7 +567,7 @@ function updateMap(rows) {
   state.markers.clearLayers();
   state.stroeerLayer.clearLayers();
   state.focusLayer.clearLayers();
-  if (state.tab !== "pipeline" && $("#show-stroeer").checked) {
+  if (state.tab !== "pipeline" && state.tab !== "eigene" && $("#show-stroeer").checked) {
     for (const it of stroeerItems($("#kreis").value)) {
       const digital = it.typ.startsWith("PV");
       L.circleMarker([it.lat, it.lon], { radius: 4, color: digital ? "#7b2cbf" : "#d9480f", weight: 1,
@@ -619,18 +634,19 @@ function exportCsv() {
     ["Ströer-Flächen im Umkreis", (l) => l.near?.count ?? ""],
     ["Nächste Ströer-Fläche (m)", (l) => l.near?.nearest?.dist ?? ""],
     ["Nächste Ströer-Fläche", (l) => l.near?.nearest ? `${mediaName(l.near.nearest.typ)}: ${l.near.nearest.standort} (SDAW ${l.near.nearest.id})` : ""],
-    ["Quelle", (l) => l.source_link || (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : "")],
+    ["Quelle", (l) => l.source_link || (l.photo ? "Eigenes Foto " + fmtDate(l.created) : "") ||
+      (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : "")],
   ];
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [fields.map(([h]) => cell(h)).join(";")].concat(
     rows.map((l) => fields.map(([, f]) => cell(typeof f === "function" ? f(l) : l[f])).join(";")));
-  const label = state.tab === "pipeline" ? "pipeline" : `${state.tab}_${kreisName($("#kreis").value).replace(/\W+/g, "_")}`;
+  const label = state.tab === "pipeline" || state.tab === "eigene" ? state.tab : `${state.tab}_${kreisName($("#kreis").value).replace(/\W+/g, "_")}`;
   download(`leads_${label}_${new Date().toISOString().slice(0, 10)}.csv`, "﻿" + lines.join("\r\n"), "text/csv;charset=utf-8");
 }
 
 function saveBackup() {
   download(`leadgenerator_sicherung_${new Date().toISOString().slice(0, 10)}.json`,
-    JSON.stringify({ version: 1, pipeline: state.pipeline }, null, 1), "application/json");
+    JSON.stringify({ version: 1, pipeline: state.pipeline, eigene: state.eigene }, null, 1), "application/json");
 }
 
 async function loadBackup(e) {
@@ -641,7 +657,10 @@ async function loadBackup(e) {
     if (!data.pipeline) throw new Error("Keine Leadgenerator-Sicherung.");
     Object.assign(state.pipeline, data.pipeline);
     store("pipeline", state.pipeline);
-    message(`${Object.keys(data.pipeline).length} Leads aus der Sicherung geladen.`, true);
+    Object.assign(state.eigene, data.eigene || {});
+    storeEigene();
+    const own = Object.keys(data.eigene || {}).length;
+    message(`${Object.keys(data.pipeline).length} Leads${own ? ` und ${own} eigene Leads` : ""} aus der Sicherung geladen.`, true);
     render();
   } catch (err) {
     message("Sicherung konnte nicht geladen werden: " + err.message);

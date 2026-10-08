@@ -15,12 +15,23 @@
     <button data-tab="search" class="active">Firmensuche</button>
     <button data-tab="new">Neugründungen</button>
     <button data-tab="news">News-Radar</button>
+    <button data-tab="eigene">Eigene Leads</button>
     <button data-tab="pipeline">Meine Pipeline</button>
   </nav>
 </header>
 
 <div class="layout">
   <aside>
+    <section class="only-eigene">
+      <label>Fotos hinzufügen</label>
+      <label class="photo-drop" id="photo-drop" for="photo-input">
+        <b>📷 Fotos auswählen</b>
+        <span>Fahrzeug- oder Schildwerbung, Plakate, Flyer … (mehrere auf einmal möglich)</span>
+      </label>
+      <input type="file" id="photo-input" accept="image/*" multiple hidden>
+      <p class="hint">Die Texterkennung läuft direkt in deinem Browser. Telefonnummer, Website und Firmenname werden mit allen Betrieben in Baden-Württemberg abgeglichen. Die Fotos bleiben auf deinem Gerät.</p>
+    </section>
+
     <section class="only-search only-new only-news">
       <label for="kreis">Stadt-/Landkreis</label>
       <select id="kreis"></select>
@@ -50,7 +61,7 @@
       <div id="topics" class="checklist"></div>
     </section>
 
-    <section class="only-search only-new only-pipeline">
+    <section class="only-search only-new only-pipeline only-eigene">
       <label>Filter</label>
       <label class="check only-search only-new"><input type="checkbox" id="hide-chains" checked> Ketten/Filialen ausblenden</label>
       <label class="check only-search only-new"><input type="checkbox" id="need-contact"> nur mit Telefon/E-Mail/Website</label>
@@ -60,7 +71,7 @@
       <select id="status-filter" class="only-pipeline"><option value="">Alle Status</option></select>
     </section>
 
-    <section class="only-search only-new only-pipeline">
+    <section class="only-search only-new only-pipeline only-eigene">
       <div class="row-between">
         <label>Ströer-Werbeträger</label>
         <span class="links"><a href="#" data-media="alle">alle</a> · <a href="#" data-media="keine">keine</a></span>
@@ -83,9 +94,9 @@
       <label class="check"><input type="checkbox" id="show-stroeer" checked> Ströer-Flächen in der Karte zeigen</label>
     </section>
 
-    <section class="only-pipeline">
+    <section class="only-pipeline only-eigene">
       <label>Sicherung</label>
-      <p class="hint">Status und Notizen werden nur in diesem Browser gespeichert. Sichere sie ab und zu als Datei.</p>
+      <p class="hint">Eigene Leads, Status und Notizen werden nur in diesem Browser gespeichert. Sichere sie ab und zu als Datei.</p>
       <div class="backup">
         <button id="backup-save">Sicherung speichern</button>
         <label class="btn" for="backup-load">Sicherung laden</label>
@@ -106,11 +117,13 @@
     </div>
     <div id="map" hidden></div>
     <div id="status-msg" hidden></div>
+    <div id="queue" hidden></div>
     <div id="results"></div>
   </main>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="eigene.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

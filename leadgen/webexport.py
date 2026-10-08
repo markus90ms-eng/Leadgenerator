@@ -39,6 +39,42 @@ def compact(lead):
     return out
 
 
+WEBMAIL = {"gmail.com", "googlemail.com", "web.de", "gmx.de", "gmx.net", "t-online.de", "outlook.com", "outlook.de",
+           "hotmail.com", "hotmail.de", "yahoo.com", "yahoo.de", "icloud.com", "freenet.de", "arcor.de", "aol.com"}
+
+
+def norm_phone(value):
+    """'+49 (0)711 12-34' -> '07111234' (deutsche Schreibweise ohne Zeichen)"""
+    digits = "".join(c for c in value.replace("(0)", "") if c.isdigit() or c == "+")
+    if digits.startswith("+49"):
+        digits = "0" + digits[3:]
+    elif digits.startswith("0049"):
+        digits = "0" + digits[4:]
+    digits = digits.replace("+", "")
+    return digits if len(digits) >= 6 else ""
+
+
+def norm_domain(value):
+    value = value.strip().lower()
+    if "@" in value:
+        value = value.rsplit("@", 1)[1]
+    for prefix in ("https://", "http://"):
+        if value.startswith(prefix):
+            value = value[len(prefix):]
+    value = value.split("/")[0].split("?")[0].split(":")[0]
+    if value.startswith("www."):
+        value = value[4:]
+    return "" if "." not in value or value in WEBMAIL else value
+
+
+def search_row(lead, ags):
+    """Eintrag im Suchindex für den Abgleich mit Fotos (Name, Telefon, Domain)."""
+    phones = {norm_phone(p) for p in (lead.get("phone") or "").split(";")}
+    domains = {norm_domain(lead.get(k) or "") for k in ("website", "email")}
+    return [lead["id"], lead.get("name", ""), ags, " ".join(sorted(p for p in phones if p)),
+            " ".join(sorted(d for d in domains if d))]
+
+
 def fetch_previous(base, path):
     if not base:
         return None
@@ -152,23 +188,27 @@ def main(argv=None):
     leads_by_kreis, boundaries = osmimport.load(args.pbf)
     stroeer_by_kreis = export_stroeer(boundaries, args.skip_stroeer)
 
-    status, updated = {}, 0
+    status, updated, index = {}, 0, []
     for ags, kreis in KREISE.items():
         leads = leads_by_kreis.get(ags) or []
         previous = fetch_previous(args.previous, f"data/kreis/{ags}.json")
         if leads:
             baseline = carry_first_seen(leads, previous, today)
+            rows = [compact(l) for l in leads]
             write(args.out, f"data/kreis/{ags}.json",
-                  {"kreis": ags, "updated": today, "baseline": baseline, "leads": [compact(l) for l in leads]})
+                  {"kreis": ags, "updated": today, "baseline": baseline, "leads": rows})
             status[ags] = {"updated": today, "count": len(leads)}
             updated += 1
         else:
             status[ags] = keep_previous(ags, args.out, previous)
+            rows = (previous or {}).get("leads") or []
+        index.extend(search_row(l, ags) for l in rows if l.get("id"))
         status[ags]["news"] = export_news(ags, args.out, args.previous, today)
         status[ags]["stroeer"] = write_stroeer(ags, args.out, args.previous, today, stroeer_by_kreis)
         print(f"{kreis['name']}: {status[ags]['count']} Betriebe, {status[ags]['news']} Meldungen, "
               f"{status[ags]['stroeer']} Ströer-Flächen", flush=True)
 
+    write(args.out, "data/suche.json", {"fields": ["id", "name", "kreis", "phone", "domain"], "rows": index})
     write(args.out, "data/meta.json", {
         "generated": today,
         "kreise": list(KREISE.values()),

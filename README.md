@@ -10,6 +10,7 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 - **CSV-Export** (Excel-tauglich) für CRM/Salesforce
 - **Karte** mit allen Treffern
 - **Pitch mit Claude** – Knopf pro Betrieb öffnet claude.ai mit einer fertigen Anfrage (Firmendaten, Ströer-Flächen in der Nähe, Gesprächsleitfaden); Claude sieht sich die Website an und schreibt einen individuellen Telefonpitch inkl. Einwandbehandlung.
+- **Eigene Leads aus Fotos** – Fotos von Fahrzeug-, Schild- oder Plakatwerbung hochladen (auch mehrere, am Handy direkt aus Kamera/Galerie). Die Texterkennung läuft im Browser, erkennt Telefonnummer, Website, E-Mail und Firmenname und gleicht sie mit allen Betrieben in BW ab. Nach kurzer Prüfung wird daraus ein Lead mit Ströer-Flächen, Score, Pipeline und Pitch-Knopf. Die Fotos bleiben auf dem Gerät.
 - **Ströer-Werbeträger im Umkreis** – zeigt pro Betrieb die Ströer-Flächen in der Nähe (Großfläche, City-Light, DOOH …), filterbar nach Trägerart, mit Kartenebene und CSV-Spalten. Quelle: öffentliche Ströer-Standortkarte; nur Ströer-eigene Flächen (Pächter 368, 252), ohne Preise.
 
 ## Web-Version (ohne Installation)

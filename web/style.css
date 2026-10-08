@@ -100,6 +100,35 @@ tr.near-detail td { background: #f7f9fc; padding: 0; }
 .badge.digital { background: #f1e8fb; color: #6a1fb0; }
 .badge.classic { background: #fdece3; color: #b23c08; }
 @media (max-width: 700px) { .near-list li { grid-template-columns: 56px 1fr; } .near-list .where, .near-list .links { grid-column: 1 / -1; } }
-#map { scroll-margin-top: 80px; }
+#map, #queue { scroll-margin-top: 80px; }
 .pitch-btn { display: block; margin-bottom: 4px; padding: 4px 10px; font-size: 13px; font-weight: 600; color: var(--accent); border-color: var(--accent); background: var(--accent-soft); white-space: nowrap; }
 .pitch-btn:hover { background: var(--accent); color: #fff; }
+
+/* Eigene Leads aus Fotos */
+.photo-drop { display: block; border: 2px dashed var(--accent); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; background: var(--accent-soft); color: var(--accent); font-weight: 400 !important; }
+.photo-drop b { display: block; font-size: 15px; margin-bottom: 4px; }
+.photo-drop span { font-size: 12px; color: var(--muted); }
+.photo-drop.over, .photo-drop:hover { background: #d6e5f7; }
+#queue { display: grid; gap: 10px; margin-bottom: 14px; }
+.queue-head { display: flex; gap: 8px; align-items: baseline; }
+.queue-head .sub { color: var(--muted); font-size: 12px; }
+.job { display: grid; grid-template-columns: 180px 1fr; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.job img, .job .ph { width: 100%; border-radius: 8px; display: block; background: #eef0f3; min-height: 120px; object-fit: cover; }
+.job-body { min-width: 0; display: grid; gap: 10px; align-content: start; }
+.job .progress { font-weight: 600; color: var(--accent); }
+.job .error { color: var(--bad); }
+.job .found .badge { font-size: 12px; }
+.job .cands .label { font-weight: 600; margin-bottom: 4px; }
+.job .cands .check { display: flex; gap: 8px; align-items: baseline; margin: 3px 0; }
+.job .sub { color: var(--muted); font-size: 12px; }
+.job .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.job .form label { font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+.job .form input, .job .form select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 14px; color: var(--text); background: #fff; }
+.job details pre { white-space: pre-wrap; font-size: 12px; background: #f7f9fc; padding: 8px; border-radius: 6px; max-height: 200px; overflow: auto; margin: 6px 0 0; }
+.job details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.job-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.job-actions .pitch-btn { display: inline-block; margin: 0; padding: 7px 14px; }
+@media (max-width: 700px) { .job { grid-template-columns: 1fr; } .job img { max-height: 220px; } }
+img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border-radius: 6px; margin-bottom: 4px; }
+.badge.foto { background: #e8f3f1; color: #0f6b5c; }
+.del-btn { display: block; margin-top: 4px; padding: 3px 8px; font-size: 12px; color: var(--bad); }
