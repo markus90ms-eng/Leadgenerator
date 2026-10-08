@@ -10,7 +10,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from leadgen import news, overpass, service  # noqa: E402
+from leadgen import news, overpass, service, stroeer  # noqa: E402
 from leadgen.categories import classify  # noqa: E402
 from leadgen.db import Store  # noqa: E402
 from leadgen.regions import KREISE  # noqa: E402
@@ -33,10 +33,52 @@ OVERPASS_RESPONSE = {
     ]
 }
 
+STROEER_ROWS = [
+    {"uid": "8115003:368:223774:GF", "sdaw": "368000022377402", "StoID": "7123", "Paechter": "0368",
+     "StoNr": "223774", "Ortname": "B\u00f6blingen", "PLZ": "71034", "Anschlagart": "Gro\u00dffl\u00e4chen alle",
+     "Standort": "TALSTR  10 PH LI/SINDELFINGER ALLEE", "Typ": "GF", "Netz": "0",
+     "UTMBA": "48.6890684872", "UTMLA": "9.0077559091", "PreisFormatted": "47,85 \u20ac",
+     "FotoName": "https://karte.stroeer.de/fileadmin/photos/08115003/135/00223774.jpg"},
+    {"uid": "x", "sdaw": "252999", "Typ": "PVC", "UTMBA": "49.4", "UTMLA": "9.4", "Netz": "0"},  # außerhalb
+    {"uid": "y", "sdaw": "135000009467301", "Paechter": "0135", "Typ": "GF",  # Fremdfläche
+     "UTMBA": "48.6844566287", "UTMLA": "8.9943058044", "Netz": "0"},
+]
+
+
+def fake_stroeer_get(params):
+    # Erste Seite mit Daten und "weitere vorhanden", zweite Seite leer
+    if params.get("redo"):
+        return [[], 0, []]
+    return [STROEER_ROWS, 1, []]
+
+
 RSS = b"""<?xml version="1.0"?><rss><channel>
 <item><title>Neues Caf\xc3\xa9 er\xc3\xb6ffnet in B\xc3\xb6blingen - SZ/BZ</title><link>https://example.com/a</link>
 <pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate><source url="https://szbz.de">SZ/BZ</source></item>
 </channel></rss>"""
+
+
+class StroeerTest(unittest.TestCase):
+    def test_parse_and_paging(self):
+        calls = []
+        with mock.patch.object(stroeer.Client, "get", side_effect=lambda p: calls.append(dict(p)) or fake_stroeer_get(p)):
+            rows = stroeer.Client(pause=0).tile(48.6, 8.9, 48.7, 9.05)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["clear"], 1)
+        self.assertEqual((calls[1]["redo"], calls[1]["counter"]), (1, 1))
+        item = stroeer.parse(rows[0])
+        self.assertEqual(item["standort"], "TALSTR 10 PH LI/SINDELFINGER ALLEE")
+        self.assertEqual((item["lat"], item["paechter"]), (48.689068, "368"))
+        self.assertEqual([stroeer.is_stroeer(r) for r in rows], [True, True, False])
+
+    def test_flatten_params(self):
+        flat = dict(stroeer._flatten("tx", {"bounds": {"sw": "1,2"}, "zoom": 14}, []))
+        self.assertEqual(flat, {"tx[bounds][sw]": "1,2", "tx[zoom]": "14"})
+
+    def test_tiles_cover_bw(self):
+        boxes = list(stroeer.tiles())
+        self.assertGreater(len(boxes), 300)
+        self.assertTrue(any(s <= 48.689 <= n and w <= 9.007 <= e for s, w, n, e in boxes))
 
 
 class RegionsTest(unittest.TestCase):
@@ -147,7 +189,8 @@ class WebExportTest(unittest.TestCase):
     def test_osm_import_assigns_kreis(self):
         from leadgen import osmimport
 
-        leads = osmimport.load(MINI_OSM)
+        leads, boundaries = osmimport.load(MINI_OSM)
+        self.assertEqual(list(boundaries), ["08115"])
         names = {l["name"]: l for l in leads["08115"]}
         self.assertEqual(set(names), {"Autohaus Müller", "FitBox", "Pasta Nova"})  # ohne "Außerhalb" und Bank
         self.assertEqual(names["Pasta Nova"]["id"], "osm:way/200")
@@ -174,7 +217,8 @@ class WebExportTest(unittest.TestCase):
             with mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
                     mock.patch.object(webexport, "fetch_previous",
                                       lambda base, path: prev if path == "data/kreis/08115.json" else None):
-                self.assertEqual(webexport.main(["--out", out, "--pbf", MINI_OSM, "--previous", "x"]), 0)
+                with mock.patch.object(stroeer.Client, "get", side_effect=fake_stroeer_get):
+                    self.assertEqual(webexport.main(["--out", out, "--pbf", MINI_OSM, "--previous", "x"]), 0)
             with open(os.path.join(out, "data/kreis/08115.json"), encoding="utf-8") as fh:
                 leads = {l["name"]: l for l in json.load(fh)["leads"]}
             self.assertNotIn("first_seen", leads["Autohaus Müller"])  # schon bekannt
@@ -184,6 +228,11 @@ class WebExportTest(unittest.TestCase):
                 status = json.load(fh)["status"]
             self.assertEqual(status["08115"]["count"], 3)
             self.assertEqual(status["08111"]["count"], 0)
+            self.assertEqual(status["08115"]["stroeer"], 1)  # einer innerhalb, einer außerhalb des Kreises
+            with open(os.path.join(out, "data/stroeer/08115.json"), encoding="utf-8") as fh:
+                item = json.load(fh)["items"][0]
+            self.assertEqual((item["typ"], item["id"], item["paechter"]), ("GF", "368000022377402", "368"))
+            self.assertNotIn("preis", item)
 
     def test_first_seen_ignores_empty_or_baseline_data(self):
         from leadgen.webexport import carry_first_seen

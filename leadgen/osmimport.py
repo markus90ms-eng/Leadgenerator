@@ -44,10 +44,9 @@ def match_kreis(tags):
 
 
 def load(path):
-    """Gibt {ags: [lead, ...]} für alle Kreise zurück."""
+    """Gibt ({ags: [lead, ...]}, {ags: Kreisgrenze}) für alle Kreise zurück."""
     import osmium
     import shapely
-    from shapely.strtree import STRtree
 
     wkb = osmium.geom.WKBFactory()
     boundaries = {}  # ags -> (admin_level, geometry)
@@ -92,18 +91,30 @@ def load(path):
     if missing:
         print("Keine Grenze gefunden für: " + ", ".join(KREISE[a]["name"] for a in missing), flush=True)
 
-    codes = list(boundaries)
-    tree = STRtree([boundaries[a][1] for a in codes])
-    points = shapely.points([(el["lon"], el["lat"]) for el in pois])
-    result = {a: [] for a in codes}
+    geoms = {a: g for a, (_, g) in boundaries.items()}
+    result = {a: [] for a in geoms}
     seen = set()
-    for poi_idx, kreis_idx in zip(*tree.query(points, predicate="within")):
-        el = pois[poi_idx]
-        if (el["type"], el["id"]) in seen:
+    for el, ags in zip(pois, assign_kreis(geoms, [(el["lon"], el["lat"]) for el in pois])):
+        if not ags or (el["type"], el["id"]) in seen:
             continue
         seen.add((el["type"], el["id"]))
-        ags = codes[kreis_idx]
         lead = element_to_lead(el, ags)
         if lead:
             result[ags].append(lead)
-    return result
+    return result, geoms
+
+
+def assign_kreis(geoms, coords):
+    """Ordnet (lon, lat)-Punkte einem Kreis zu. Gibt pro Punkt die AGS oder None zurück."""
+    import shapely
+    from shapely.strtree import STRtree
+
+    codes = list(geoms)
+    out = [None] * len(coords)
+    if not codes or not coords:
+        return out
+    tree = STRtree([geoms[a] for a in codes])
+    for point_idx, kreis_idx in zip(*tree.query(shapely.points(coords), predicate="within")):
+        if out[point_idx] is None:
+            out[point_idx] = codes[kreis_idx]
+    return out

@@ -60,6 +60,29 @@
       <select id="status-filter" class="only-pipeline"><option value="">Alle Status</option></select>
     </section>
 
+    <section class="only-search only-new only-pipeline">
+      <div class="row-between">
+        <label>Ströer-Werbeträger</label>
+        <span class="links"><a href="#" data-media="alle">alle</a> · <a href="#" data-media="keine">keine</a></span>
+      </div>
+      <div class="links media-groups">
+        <a href="#" data-media="Out-of-Home klassisch">Klassisch</a> ·
+        <a href="#" data-media="Premium Out-of-Home">Premium</a> ·
+        <a href="#" data-media="Digital Out-of-Home">Digital</a>
+      </div>
+      <div id="media" class="checklist"></div>
+      <div class="stand" id="stroeer-info"></div>
+      <label for="radius">Umkreis um den Betrieb</label>
+      <select id="radius">
+        <option value="250">250 m</option>
+        <option value="500" selected>500 m</option>
+        <option value="1000">1 km</option>
+        <option value="2000">2 km</option>
+      </select>
+      <label class="check"><input type="checkbox" id="only-near"> nur Betriebe mit Ströer-Fläche im Umkreis</label>
+      <label class="check"><input type="checkbox" id="show-stroeer" checked> Ströer-Flächen in der Karte zeigen</label>
+    </section>
+
     <section class="only-pipeline">
       <label>Sicherung</label>
       <p class="hint">Status und Notizen werden nur in diesem Browser gespeichert. Sichere sie ab und zu als Datei.</p>
@@ -70,7 +93,7 @@
       </div>
     </section>
 
-    <p class="hint">Daten: OpenStreetMap (Firmen) und Google News (Meldungen). Jeden Morgen automatisch aktualisiert.</p>
+    <p class="hint">Daten: OpenStreetMap (Firmen), Google News (Meldungen) und Ströer-Standortkarte (Werbeträger). Jeden Morgen automatisch aktualisiert.</p>
   </aside>
 
   <main>

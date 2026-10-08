@@ -16,7 +16,7 @@ import sys
 import urllib.request
 from datetime import date
 
-from . import news, osmimport
+from . import news, osmimport, stroeer
 from .categories import CATEGORIES
 from .regions import KREISE
 
@@ -88,6 +88,43 @@ def export_news(ags, out, previous_base, today):
     return len(items)
 
 
+def export_stroeer(boundaries, skip=False):
+    """Ströer-Standorte für ganz BW laden und den Kreisen zuordnen.
+    None = nicht (vollständig) geladen -> Daten vom letzten Lauf behalten."""
+    if skip or not boundaries:
+        return None
+    from shapely.ops import unary_union
+
+    print("Lade Ströer-Standorte …", flush=True)
+    try:
+        items, complete = stroeer.fetch_all(unary_union(list(boundaries.values())),
+                                            log=lambda m: print(m, flush=True))
+    except Exception as exc:
+        print(f"Ströer: Abruf fehlgeschlagen: {exc}", flush=True)
+        return None
+    print(f"Ströer: {len(items)} Flächen geladen (vollständig: {complete})", flush=True)
+    if not items:
+        return None
+    by_kreis = {ags: [] for ags in boundaries}
+    for item, ags in zip(items, osmimport.assign_kreis(boundaries, [(i["lon"], i["lat"]) for i in items])):
+        if ags:
+            by_kreis[ags].append(item)
+    return {"complete": complete, "items": by_kreis}
+
+
+def write_stroeer(ags, out, previous_base, today, stroeer_by_kreis):
+    path = f"data/stroeer/{ags}.json"
+    items = (stroeer_by_kreis or {}).get("items", {}).get(ags) or []
+    if not items or (stroeer_by_kreis and not stroeer_by_kreis["complete"]):
+        previous = fetch_previous(previous_base, path)
+        if previous and len(previous.get("items", [])) > len(items):
+            write(out, path, previous)
+            return len(previous["items"])
+    if items:
+        write(out, path, {"kreis": ags, "updated": today, "items": items})
+    return len(items)
+
+
 def write(out, path, payload):
     full = os.path.join(out, path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -101,6 +138,7 @@ def main(argv=None):
     parser.add_argument("--pbf", default="baden-wuerttemberg-latest.osm.pbf",
                         help="OSM-Datei; wird von Geofabrik geladen, falls sie fehlt")
     parser.add_argument("--previous", default="", help="URL der bisher veröffentlichten Seite")
+    parser.add_argument("--skip-stroeer", action="store_true", help="Ströer-Standorte nicht neu abrufen")
     args = parser.parse_args(argv)
 
     shutil.rmtree(args.out, ignore_errors=True)
@@ -111,7 +149,8 @@ def main(argv=None):
         print(f"Lade {osmimport.GEOFABRIK_URL} …", flush=True)
         osmimport.download(args.pbf)
     print("Lese Betriebe aus OSM-Daten …", flush=True)
-    leads_by_kreis = osmimport.load(args.pbf)
+    leads_by_kreis, boundaries = osmimport.load(args.pbf)
+    stroeer_by_kreis = export_stroeer(boundaries, args.skip_stroeer)
 
     status, updated = {}, 0
     for ags, kreis in KREISE.items():
@@ -126,13 +165,17 @@ def main(argv=None):
         else:
             status[ags] = keep_previous(ags, args.out, previous)
         status[ags]["news"] = export_news(ags, args.out, args.previous, today)
-        print(f"{kreis['name']}: {status[ags]['count']} Betriebe, {status[ags]['news']} Meldungen", flush=True)
+        status[ags]["stroeer"] = write_stroeer(ags, args.out, args.previous, today, stroeer_by_kreis)
+        print(f"{kreis['name']}: {status[ags]['count']} Betriebe, {status[ags]['news']} Meldungen, "
+              f"{status[ags]['stroeer']} Ströer-Flächen", flush=True)
 
     write(args.out, "data/meta.json", {
         "generated": today,
         "kreise": list(KREISE.values()),
         "categories": [{"id": c["id"], "name": c["name"], "weight": c["weight"]} for c in CATEGORIES.values()],
         "topics": news.TOPIC_LABELS,
+        "media": stroeer.MEDIA,
+        "media_groups": stroeer.GROUPS,
         "status": status,
     })
     print(f"Fertig. {updated}/{len(KREISE)} Kreise aktualisiert.")

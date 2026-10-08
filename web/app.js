@@ -5,6 +5,8 @@ const state = {
   meta: null,
   kreisData: {},   // ags -> {updated, leads}
   newsData: {},    // ags -> {updated, items}
+  stroeerData: {}, // ags -> {updated, items}
+  nearIndex: null, // Raster der gefilterten Ströer-Flächen für die Umkreissuche
   pipeline: {},    // id -> {status, notes, updated, lead}
   sort: { key: "score", dir: -1 },
   limit: 200,
@@ -52,7 +54,7 @@ function newReason(l, since) {
   return "";
 }
 
-function score(l, reason) {
+function score(l, reason, near) {
   const weight = state.meta.categories.find((c) => c.id === l.category)?.weight ?? 20;
   const parts = [[weight, "Branche"]];
   if (reason === "Neueröffnung") parts.push([30, "Neueröffnung"]);
@@ -61,6 +63,7 @@ function score(l, reason) {
   if (l.phone) parts.push([8, "Telefon"]);
   if (l.email) parts.push([7, "E-Mail"]);
   if (l.hours) parts.push([5, "Aktiv (Öffnungszeiten)"]);
+  if (near?.count) parts.push([10, "Ströer-Fläche im Umkreis"]);
   if (l.chain) parts.push([-25, "Kette/Filiale (zentrales Marketing)"]);
   const total = Math.max(0, Math.min(100, parts.reduce((s, [p]) => s + p, 0)));
   return [total, parts.map(([p, why]) => `${why} ${p > 0 ? "+" : ""}${p}`)];
@@ -68,10 +71,97 @@ function score(l, reason) {
 
 function enrich(l, since) {
   const reason = newReason(l, since);
-  const [s, reasons] = score(l, reason);
   const p = state.pipeline[l.id];
-  return { ...l, kreis: l.kreis || p?.lead?.kreis, new_reason: reason, score: s, score_reasons: reasons,
+  const kreis = l.kreis || p?.lead?.kreis;
+  const near = nearby(l, kreis);
+  const [s, reasons] = score(l, reason, near);
+  return { ...l, kreis, new_reason: reason, score: s, score_reasons: reasons, near, near_count: near?.count || 0,
     status: p?.status || "neu", notes: p?.notes || "" };
+}
+
+// ---------- Ströer-Werbeträger -------------------------------------------
+const DEFAULT_MEDIA = ["GF", "VI", "VIP", "GVS", "GVN", "PVC", "PVR", "PVT", "PVI", "PVM", "PVS", "PVGI", "PVGO"];
+const mediaName = (typ) => state.meta.media?.[typ] || typ;
+const selectedMedia = () => new Set([...document.querySelectorAll("#media input:checked")].map((i) => i.value));
+
+function stroeerItems(ags) {
+  const media = selectedMedia();
+  return (state.stroeerData[ags]?.items || []).filter((i) => media.has(i.typ));
+}
+
+// Grobe Meter-Distanz (für Umkreise bis wenige km genau genug)
+function meters(lat1, lon1, lat2, lon2) {
+  const dy = (lat2 - lat1) * 111200, dx = (lon2 - lon1) * 111200 * Math.cos(lat1 * Math.PI / 180);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Raster pro Kreis, damit die Umkreissuche auch bei vielen Betrieben schnell bleibt
+function nearIndex(ags) {
+  const key = [...selectedMedia()].sort().join();
+  if (state.nearIndex?.key !== key) state.nearIndex = { key, byKreis: {} };
+  if (!state.nearIndex.byKreis[ags]) {
+    const grid = new Map();
+    for (const it of stroeerItems(ags)) {
+      const cell = `${Math.floor(it.lat / 0.02)}|${Math.floor(it.lon / 0.03)}`;
+      if (!grid.has(cell)) grid.set(cell, []);
+      grid.get(cell).push(it);
+    }
+    state.nearIndex.byKreis[ags] = grid;
+  }
+  return state.nearIndex.byKreis[ags];
+}
+
+function nearby(l, ags) {
+  if (l.lat == null || !state.stroeerData[ags]?.items?.length) return null;
+  const radius = +$("#radius").value;
+  const grid = nearIndex(ags), cy = Math.floor(l.lat / 0.02), cx = Math.floor(l.lon / 0.03);
+  const hits = [];
+  for (let y = cy - 1; y <= cy + 1; y++) {
+    for (let x = cx - 1; x <= cx + 1; x++) {
+      for (const it of grid.get(`${y}|${x}`) || []) {
+        const d = meters(l.lat, l.lon, it.lat, it.lon);
+        if (d <= radius) hits.push({ ...it, dist: Math.round(d) });
+      }
+    }
+  }
+  hits.sort((a, b) => a.dist - b.dist);
+  const byType = {};
+  for (const h of hits) byType[h.typ] = (byType[h.typ] || 0) + 1;
+  return { count: hits.length, nearest: hits[0] || null, byType, items: hits };
+}
+
+function renderMediaFilter() {
+  const ags = $("#kreis").value;
+  const items = state.stroeerData[ags]?.items || [];
+  const counts = {};
+  for (const i of items) counts[i.typ] = (counts[i.typ] || 0) + 1;
+  const saved = load("media", DEFAULT_MEDIA);
+  $("#media").innerHTML = Object.keys(state.meta.media || {}).map((typ) =>
+    `<label><input type="checkbox" value="${typ}" ${saved.includes(typ) ? "checked" : ""}> ${esc(mediaName(typ))}
+      <span class="count">${counts[typ] || 0}</span></label>`).join("");
+  $("#stroeer-info").textContent = items.length
+    ? `${items.length} Ströer-Flächen im Kreis · Stand ${fmtDate(state.stroeerData[ags].updated)}`
+    : "Für diesen Kreis liegen noch keine Ströer-Daten vor.";
+}
+
+function setMedia(types) {
+  document.querySelectorAll("#media input").forEach((i) => (i.checked = types.includes(i.value)));
+  mediaChanged();
+}
+
+function mediaChanged() {
+  store("media", [...selectedMedia()]);
+  state.nearIndex = null;
+  render();
+}
+
+function nearHtml(near) {
+  if (!near) return `<span class="sub">–</span>`;
+  if (!near.count) return `<span class="sub">keine im Umkreis</span>`;
+  const types = Object.entries(near.byType).map(([t, n]) => `${n}× ${esc(mediaName(t))}`).join(", ");
+  const list = near.items.slice(0, 8).map((i) => `${i.dist} m – ${mediaName(i.typ)}: ${i.standort} (SDAW ${i.id})`).join("\n");
+  return `<span title="${esc(list)}"><b>${near.count}</b> ${near.count === 1 ? "Fläche" : "Flächen"} · nächste ${near.nearest.dist} m</span>
+    <div class="sub">${types}</div>`;
 }
 
 // ---------- Setup ---------------------------------------------------------
@@ -115,6 +205,16 @@ async function init() {
   }
   $("#cats").addEventListener("change", () => store("cats", selectedCats()));
   kreisSel.onchange = () => { store("kreis", kreisSel.value); loadKreis(); };
+  $("#radius").value = load("radius", "500");
+  $("#radius").onchange = () => { store("radius", $("#radius").value); render(); };
+  $("#only-near").oninput = () => { state.limit = 200; render(); };
+  $("#show-stroeer").oninput = () => render();
+  $("#media").addEventListener("change", mediaChanged);
+  document.querySelectorAll("[data-media]").forEach((a) => (a.onclick = (e) => {
+    e.preventDefault();
+    const g = a.dataset.media;
+    setMedia(g === "alle" ? Object.keys(state.meta.media || {}) : g === "keine" ? [] : state.meta.media_groups?.[g] || []);
+  }));
 
   const startTab = location.hash.slice(1);
   switchTab(["search", "new", "news", "pipeline"].includes(startTab) ? startTab : "search");
@@ -146,7 +246,7 @@ async function loadKreis() {
   const ags = $("#kreis").value;
   const info = state.meta.status?.[ags];
   $("#stand").textContent = info?.updated ? `Datenstand: ${fmtDate(info.updated)} · ${info.count} Betriebe` : "";
-  if (state.kreisData[ags]) return render();
+  if (state.kreisData[ags]) { renderMediaFilter(); return render(); }
   if (!info?.count) {
     $("#results").innerHTML = "";
     $("#summary").textContent = "";
@@ -154,18 +254,21 @@ async function loadKreis() {
   }
   message(`Lade ${kreisName(ags)} …`, true);
   try {
-    const [companies, newsFeed] = await Promise.all([
+    const [companies, newsFeed, stroeerFeed] = await Promise.all([
       getJson(`data/kreis/${ags}.json`),
       getJson(`data/news/${ags}.json`).catch(() => ({ items: [] })),
+      getJson(`data/stroeer/${ags}.json`).catch(() => ({ items: [] })),
     ]);
     for (const l of companies.leads) l.kreis = ags;
     state.kreisData[ags] = companies;
     state.newsData[ags] = newsFeed;
+    state.stroeerData[ags] = stroeerFeed;
+    state.nearIndex = null;
     message("");
   } catch (err) {
     message(err.message);
   }
-  if ($("#kreis").value === ags) render();
+  if ($("#kreis").value === ags) { renderMediaFilter(); render(); }
 }
 
 function message(text, loading = false) {
@@ -202,6 +305,7 @@ function filtered(rows) {
     (pipe || !$("#hide-chains").checked || !l.chain) &&
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
     (!pipe || !status || l.status === status) &&
+    (!$("#only-near").checked || l.near_count > 0) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
   const { key, dir } = state.sort;
@@ -234,7 +338,7 @@ function render() {
 
   const cols = [
     ["score", "Score"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
-    [null, "Kontakt"], ["status", "Status"], [null, "Notiz"], [null, ""],
+    [null, "Kontakt"], ["near_count", "Ströer im Umkreis"], ["status", "Status"], [null, "Notiz"], [null, ""],
   ];
   const head = cols.map(([k, label]) =>
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
@@ -244,7 +348,7 @@ function render() {
 
   document.querySelectorAll("th[data-sort]").forEach((th) => (th.onclick = () => {
     const k = th.dataset.sort;
-    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "score" ? -1 : 1) };
+    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "score" || k === "near_count" ? -1 : 1) };
     render();
   }));
   $("#more")?.addEventListener("click", () => { state.limit += 200; render(); });
@@ -275,6 +379,7 @@ function rowHtml(l) {
     <td>${esc(catName(l.category))}${state.tab === "pipeline" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
     <td class="contact">${contact}</td>
+    <td class="near">${nearHtml(l.near)}</td>
     <td><select data-id="${esc(l.id)}" aria-label="Status">${statusOpts}</select></td>
     <td><textarea data-id="${esc(l.id)}" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
     <td class="contact">
@@ -286,7 +391,7 @@ function rowHtml(l) {
 }
 
 function save(lead, patch) {
-  const { new_reason, score, score_reasons, status, notes, ...raw } = lead;
+  const { new_reason, score, score_reasons, status, notes, near, near_count, ...raw } = lead;
   const entry = state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
   Object.assign(entry, patch, { updated: new Date().toISOString() });
   if (entry.status === "neu" && !entry.notes) delete state.pipeline[lead.id];
@@ -329,6 +434,7 @@ function toggleMap() {
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap-Mitwirkende", maxZoom: 19,
     }).addTo(state.map);
+    state.stroeerLayer = L.layerGroup().addTo(state.map);
     state.markers = L.layerGroup().addTo(state.map);
   }
   if (!el.hidden) { state.map?.invalidateSize(); render(); }
@@ -337,12 +443,25 @@ function toggleMap() {
 function updateMap(rows) {
   if (!state.map || $("#map").hidden) return;
   state.markers.clearLayers();
+  state.stroeerLayer.clearLayers();
+  if (state.tab !== "pipeline" && $("#show-stroeer").checked) {
+    for (const it of stroeerItems($("#kreis").value)) {
+      const digital = it.typ.startsWith("PV");
+      L.circleMarker([it.lat, it.lon], { radius: 4, color: digital ? "#7b2cbf" : "#d9480f", weight: 1,
+        fillColor: digital ? "#7b2cbf" : "#d9480f", fillOpacity: 0.9 })
+        .bindPopup(`<b>${esc(mediaName(it.typ))}</b><br>${esc(it.standort)}<br>${esc(it.plz)} ${esc(it.ort)}`
+          + `<br>SDAW ${esc(it.id)}${it.netz ? "<br>Teil eines Netzes" : ""}`
+          + (it.foto ? `<br><a href="${esc(it.foto)}" target="_blank" rel="noopener">Foto</a>` : ""))
+        .addTo(state.stroeerLayer);
+    }
+  }
   const pts = [];
   for (const l of rows.slice(0, 1500)) {
     if (l.lat == null) continue;
     const color = l.new_reason ? "#1f7a3d" : l.score >= 60 ? "#0b5cad" : "#8a93a3";
     L.circleMarker([l.lat, l.lon], { radius: 6, color, fillColor: color, fillOpacity: 0.8, weight: 1 })
-      .bindPopup(`<b>${esc(l.name)}</b><br>${esc(catName(l.category))}<br>${esc(l.address)}<br>Score ${l.score}`)
+      .bindPopup(`<b>${esc(l.name)}</b><br>${esc(catName(l.category))}<br>${esc(l.address)}<br>Score ${l.score}`
+        + (l.near?.count ? `<br>${l.near.count} Ströer-Flächen im Umkreis` : ""))
       .addTo(state.markers);
     pts.push([l.lat, l.lon]);
   }
@@ -368,6 +487,9 @@ function exportCsv() {
     ["Art", "kind"], ["Adresse", "address"], ["Kreis", (l) => kreisName(l.kreis)], ["Telefon", "phone"],
     ["E-Mail", "email"], ["Website", "website"], ["Kette", (l) => (l.chain ? "ja" : "")],
     ["Status", (l) => STATUS_LABELS[l.status]], ["Notiz", "notes"], ["Eröffnung", "start_date"],
+    ["Ströer-Flächen im Umkreis", (l) => l.near?.count ?? ""],
+    ["Nächste Ströer-Fläche (m)", (l) => l.near?.nearest?.dist ?? ""],
+    ["Nächste Ströer-Fläche", (l) => l.near?.nearest ? `${mediaName(l.near.nearest.typ)}: ${l.near.nearest.standort} (SDAW ${l.near.nearest.id})` : ""],
     ["Quelle", (l) => l.source_link || (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : "")],
   ];
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
