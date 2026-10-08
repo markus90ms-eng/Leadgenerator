@@ -7,6 +7,8 @@ const state = {
   newsData: {},    // ags -> {updated, items}
   stroeerData: {}, // ags -> {updated, items}
   nearIndex: null, // Raster der gefilterten Ströer-Flächen für die Umkreissuche
+  openNear: new Set(), // Betriebe, deren Flächenliste aufgeklappt ist
+  focus: null,     // Betrieb, auf den die Karte gerade zoomt
   pipeline: {},    // id -> {status, notes, updated, lead}
   sort: { key: "score", dir: -1 },
   limit: 200,
@@ -159,9 +161,43 @@ function nearHtml(near) {
   if (!near) return `<span class="sub">–</span>`;
   if (!near.count) return `<span class="sub">keine im Umkreis</span>`;
   const types = Object.entries(near.byType).map(([t, n]) => `${n}× ${esc(mediaName(t))}`).join(", ");
-  const list = near.items.slice(0, 8).map((i) => `${i.dist} m – ${mediaName(i.typ)}: ${i.standort} (SDAW ${i.id})`).join("\n");
-  return `<span title="${esc(list)}"><b>${near.count}</b> ${near.count === 1 ? "Fläche" : "Flächen"} · nächste ${near.nearest.dist} m</span>
+  return `<b>${near.count}</b> ${near.count === 1 ? "Fläche" : "Flächen"} · nächste ${near.nearest.dist} m
     <div class="sub">${types}</div>`;
+}
+
+// Aufgeklappte Listen auf die sichtbare Breite der (scrollbaren) Tabelle begrenzen
+function fitNearBoxes() {
+  const wrap = document.querySelector(".table-wrap");
+  if (wrap) wrap.style.setProperty("--wrap-w", wrap.clientWidth + "px");
+}
+window.addEventListener("resize", fitNearBoxes);
+
+const gmaps = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+
+// Aufgeklappte Liste der Flächen unter einem Betrieb
+function nearDetailHtml(l, colspan) {
+  const items = l.near.items.map((i) => `<li>
+      <span class="dist">${i.dist} m</span>
+      <span class="badge ${i.typ.startsWith("PV") ? "digital" : "classic"}">${esc(mediaName(i.typ))}</span>
+      <span class="where"><b>${esc(i.standort)}</b>, ${esc(i.plz)} ${esc(i.ort)}<span class="sub"> · SDAW ${esc(i.id)}${i.netz ? " · Teil eines Netzes" : ""}</span></span>
+      <span class="links">
+        <a href="${gmaps(i.lat, i.lon)}" target="_blank" rel="noopener">Google Maps</a>
+        ${i.foto ? `<a href="${esc(i.foto)}" target="_blank" rel="noopener">Foto</a>` : ""}
+      </span>
+    </li>`).join("");
+  return `<tr class="near-detail"><td colspan="${colspan}"><div class="near-box">
+    <div class="near-head">
+      <b>Ströer-Flächen im Umkreis von ${$("#radius").selectedOptions[0].text} um ${esc(l.name)}</b>
+      <button data-focus="${esc(l.id)}">Auf Karte zeigen</button>
+    </div>
+    <ul class="near-list">${items}</ul>
+  </div></td></tr>`;
+}
+
+function focusOnMap(l) {
+  state.focus = { id: l.id, lat: l.lat, lon: l.lon };
+  if ($("#map").hidden) toggleMap(); else updateMap(state.visible || []);
+  $("#map").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // ---------- Setup ---------------------------------------------------------
@@ -204,7 +240,7 @@ async function init() {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", () => store("cats", selectedCats()));
-  kreisSel.onchange = () => { store("kreis", kreisSel.value); loadKreis(); };
+  kreisSel.onchange = () => { store("kreis", kreisSel.value); state.focus = null; loadKreis(); };
   $("#radius").value = load("radius", "500");
   $("#radius").onchange = () => { store("radius", $("#radius").value); render(); };
   $("#only-near").oninput = () => { state.limit = 200; render(); };
@@ -231,6 +267,7 @@ const selectedTopics = () => [...document.querySelectorAll("#topics input:checke
 
 function switchTab(tab) {
   state.tab = tab;
+  state.focus = null;
   state.limit = 200;
   history.replaceState(null, "", "#" + tab);
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
@@ -342,7 +379,8 @@ function render() {
   ];
   const head = cols.map(([k, label]) =>
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
-  const body = rows.slice(0, state.limit).map(rowHtml).join("");
+  const body = rows.slice(0, state.limit).map((l) =>
+    rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")).join("");
   $("#results").innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
     ${rows.length > state.limit ? `<div class="more"><button id="more">Weitere ${Math.min(200, rows.length - state.limit)} anzeigen</button></div>` : ""}</div>`;
 
@@ -353,6 +391,13 @@ function render() {
   }));
   $("#more")?.addEventListener("click", () => { state.limit += 200; render(); });
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  fitNearBoxes();
+  document.querySelectorAll("button[data-near]").forEach((b) => (b.onclick = () => {
+    const id = b.dataset.near;
+    state.openNear.has(id) ? state.openNear.delete(id) : state.openNear.add(id);
+    render();
+  }));
+  document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
   document.querySelectorAll("textarea[data-id]").forEach((t) => (t.onchange = () => save(byId[t.dataset.id], { notes: t.value })));
   updateMap(rows);
@@ -379,7 +424,9 @@ function rowHtml(l) {
     <td>${esc(catName(l.category))}${state.tab === "pipeline" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
     <td class="contact">${contact}</td>
-    <td class="near">${nearHtml(l.near)}</td>
+    <td class="near">${l.near?.count
+      ? `<button class="near-btn${state.openNear.has(l.id) ? " open" : ""}" data-near="${esc(l.id)}" aria-expanded="${state.openNear.has(l.id)}">${nearHtml(l.near)}</button>`
+      : nearHtml(l.near)}</td>
     <td><select data-id="${esc(l.id)}" aria-label="Status">${statusOpts}</select></td>
     <td><textarea data-id="${esc(l.id)}" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
     <td class="contact">
@@ -436,6 +483,7 @@ function toggleMap() {
     }).addTo(state.map);
     state.stroeerLayer = L.layerGroup().addTo(state.map);
     state.markers = L.layerGroup().addTo(state.map);
+    state.focusLayer = L.layerGroup().addTo(state.map);
   }
   if (!el.hidden) { state.map?.invalidateSize(); render(); }
 }
@@ -444,6 +492,7 @@ function updateMap(rows) {
   if (!state.map || $("#map").hidden) return;
   state.markers.clearLayers();
   state.stroeerLayer.clearLayers();
+  state.focusLayer.clearLayers();
   if (state.tab !== "pipeline" && $("#show-stroeer").checked) {
     for (const it of stroeerItems($("#kreis").value)) {
       const digital = it.typ.startsWith("PV");
@@ -465,7 +514,28 @@ function updateMap(rows) {
       .addTo(state.markers);
     pts.push([l.lat, l.lon]);
   }
-  if (pts.length) state.map.fitBounds(pts, { padding: [20, 20], maxZoom: 14 });
+  const f = state.focus && rows.find((r) => r.id === state.focus.id);
+  if (f) {
+    // Umkreis einzeichnen und die Flächen darin hervorheben
+    L.circle([f.lat, f.lon], { radius: +$("#radius").value, color: "#0b5cad", weight: 1, fillOpacity: 0.06 })
+      .addTo(state.focusLayer);
+    for (const it of f.near?.items || []) {
+      const digital = it.typ.startsWith("PV");
+      L.circleMarker([it.lat, it.lon], { radius: 9, color: "#fff", weight: 2,
+        fillColor: digital ? "#7b2cbf" : "#d9480f", fillOpacity: 1 })
+        .bindTooltip(`${it.dist} m · ${mediaName(it.typ)}<br>${esc(it.standort)}`)
+        .bindPopup(`<b>${esc(mediaName(it.typ))}</b> · ${it.dist} m<br>${esc(it.standort)}<br>${esc(it.plz)} ${esc(it.ort)}`
+          + `<br>SDAW ${esc(it.id)}<br><a href="${gmaps(it.lat, it.lon)}" target="_blank" rel="noopener">Google Maps</a>`
+          + (it.foto ? ` · <a href="${esc(it.foto)}" target="_blank" rel="noopener">Foto</a>` : ""))
+        .addTo(state.focusLayer);
+    }
+    L.circleMarker([f.lat, f.lon], { radius: 9, color: "#fff", weight: 2, fillColor: "#0b5cad", fillOpacity: 1 })
+      .bindPopup(`<b>${esc(f.name)}</b><br>${esc(f.address)}`).addTo(state.focusLayer).openPopup();
+    const zoom = { 250: 17, 500: 16, 1000: 15, 2000: 14 }[$("#radius").value] || 15;
+    state.map.setView([f.lat, f.lon], zoom);
+  } else if (pts.length) {
+    state.map.fitBounds(pts, { padding: [20, 20], maxZoom: 14 });
+  }
 }
 
 // ---------- Export & Sicherung -------------------------------------------
