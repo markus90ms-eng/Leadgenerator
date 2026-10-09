@@ -35,34 +35,69 @@ const foldName = (s) => String(s).toLowerCase().replace(/ä/g, "a").replace(/ö/
   .replace(/ß/g, "ss").normalize("NFD").replace(/[̀-ͯ]/g, "");
 const nameTokens = (s) => foldName(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !NAME_STOP.has(t) && !/^\d+$/.test(t));
 
-// Telefon, Website, E-Mail und Kandidaten für den Firmennamen aus dem erkannten Text
-function extractFromText(text, lines = []) {
-  const flat = text.replace(/[|]/g, " ");
+const TLDS = "de|com|net|eu|info|org|biz|shop|online|gmbh|ag|at|ch|io|app|team|bayern|berlin|koeln|stuttgart";
+const STREET = "(?:straße|strasse|str\\.?|weg|platz|gasse|allee|ring|steige|steig|damm|ufer|markt|hof|tor|graben|berg|halde)";
+
+// Telefon, Website, E-Mail, Adresse und Kandidaten für den Firmennamen aus dem erkannten Text
+function extractFromText(text, lines = [], plzTable = {}) {
+  const flat = text.replace(/[|®©]/g, " ");
   const emails = [...new Set((flat.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}/gi) || []).map((e) => e.toLowerCase()))];
-  const domainRe = /\b(?:https?:\/\/)?(?:www\s?\.\s?)?((?:[a-z0-9äöü][a-z0-9äöü-]*\.)+(?:de|com|net|eu|info|org|biz|shop|online|gmbh|ag|at|ch|io|app|team|bayern|berlin|koeln|stuttgart))\b/gi;
   const domains = new Set();
+  const domainRe = new RegExp(`\\b(?:https?:\\/\\/)?(?:www\\s?\\.\\s?)?((?:[a-z0-9äöü][a-z0-9äöü-]*\\.)+(?:${TLDS}))\\b`, "gi");
   for (const m of flat.matchAll(domainRe)) {
-    const before = flat[m.index - 1];
-    if (before === "@") continue; // Teil einer E-Mail-Adresse
+    if (flat[m.index - 1] === "@") continue; // Teil einer E-Mail-Adresse
     const d = normDomain(m[1].replace(/\s/g, ""));
     if (d) domains.add(d);
   }
+  // Typische Lesefehler: "rurw.firma.d", "vvww. firma .de", "www.firma.d e"
+  const sloppyRe = new RegExp(`\\b[wvrnmu]{2,5}\\s?[.,·]\\s?([a-z0-9äöü][a-z0-9äöü-]{2,})\\s?[.,·]\\s?(${TLDS}|d)(?![a-z])`, "gi");
+  for (const m of flat.matchAll(sloppyRe)) {
+    const d = normDomain(`${m[1]}.${m[2].toLowerCase() === "d" ? "de" : m[2]}`);
+    if (d) domains.add(d);
+  }
   for (const e of emails) { const d = normDomain(e); if (d) domains.add(d); }
+
   const phones = new Set();
-  const phoneRe = /(?:(?:\+|00)\s?49\s?(?:\(0\))?|\b0)[\s\-/.()]*\d{2,5}(?:[\s\-/.()]*\d){3,10}/g;
+  const phoneRe = /(?:(?:\+|00)\s?49\s?(?:\(0\))?|\b0)[\s\-–/.()]*\d{2,5}(?:[\s\-–/.()]*\d){3,10}/g;
   for (const m of flat.matchAll(phoneRe)) {
     const p = normPhone(m[0].trim());
-    if (p.length >= 7 && p.length <= 14 && !/^0+$/.test(p)) phones.add(p);
+    if (p.length >= 7 && p.length <= 14 && !/^0+$/.test(p) && !/^0\d{4}$/.test(p)) phones.add(p);
   }
-  // Größte Schrift zuerst – das ist meistens der Firmenname
-  const names = lines
+
+  // Adresse: "Oberamteistraße 1 · 72764 Reutlingen"
+  let address = "", plz = "", ort = "", addrLine = -1;
+  const textLines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  textLines.forEach((line, n) => {
+    if (plz) return;
+    const m = line.match(/\b([6-9]\d{4})\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]{2,}(?:\s(?:am|an|im|ob|unter|bei|in)\s[A-ZÄÖÜ][a-zäöüß]+)?)/);
+    if (!m) return;
+    plz = m[1];
+    ort = plzTable[plz]?.[1] || m[2].replace(/[^A-Za-zÄÖÜäöüß-]+$/, "");
+    const st = line.match(new RegExp(`([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]*${STREET})\\s*(\\d+\\s?[a-zA-Z]?)`, "i"));
+    const prev = !st && n > 0 ? textLines[n - 1].match(new RegExp(`([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]*${STREET})\\s*(\\d+\\s?[a-zA-Z]?)`, "i")) : null;
+    const street = st || prev;
+    address = `${street ? `${street[1]} ${street[2].replace(/\s/g, "")}, ` : ""}${plz} ${ort}`;
+    addrLine = street && !st ? n - 1 : n;
+  });
+
+  // Firmenname: Zeile über der Adresse, dann größte Schrift, zuletzt Name aus der Webadresse
+  const looksLikeName = (t) => (t.match(/[A-Za-zÄÖÜäöüß]/g) || []).length >= 4 && !/@|www|\.de\b|tel|fax|\d{4,}/i.test(t)
+    && (t.match(/[A-Za-zÄÖÜäöüß]/g) || []).length / t.replace(/\s/g, "").length > 0.75;
+  const clean = (t) => t.replace(/^[^\wÄÖÜäöü]+|[^\wÄÖÜäöü.&)]+$/g, "").replace(/^(?:\S{1,2}\s+)+(?=\S{3,})/, "");
+  const names = [];
+  if (addrLine > 0 && looksLikeName(textLines[addrLine - 1])) names.push(clean(textLines[addrLine - 1]));
+  lines
     .map((l) => ({ text: l.text.trim().replace(/\s+/g, " "), h: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0, conf: l.confidence ?? 100 }))
-    .filter((l) => l.conf >= 45 && (l.text.match(/[A-Za-zÄÖÜäöüß]/g) || []).length >= 3
-      && !/@|www|\.de\b|tel|fax|\d{4,}/i.test(l.text))
+    .filter((l) => l.conf >= 70 && looksLikeName(l.text) && (l.text.match(/[A-Za-zÄÖÜäöüß]/g) || []).length >= 5)
     .sort((a, b) => b.h - a.h)
-    .slice(0, 3)
-    .map((l) => l.text.replace(/^[^\wÄÖÜäöü]+|[^\wÄÖÜäöü.&)]+$/g, ""));
-  return { phones: [...phones], domains: [...domains], emails, names };
+    .slice(0, 2)
+    .forEach((l) => names.push(clean(l.text)));
+  for (const d of domains) {
+    const core = d.split(".")[0];
+    if (core.length >= 3 && !WEBMAIL.has(d)) names.push(core.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "));
+  }
+  return { phones: [...phones], domains: [...domains], emails, names: [...new Set(names)], address, plz, ort,
+    kreis: plzTable[plz]?.[0] || "" };
 }
 
 // ---------- Suchindex aller Betriebe (data/suche.json) ---------------------
@@ -70,7 +105,8 @@ let searchIndex = null;
 async function getSearchIndex() {
   if (searchIndex) return searchIndex;
   const data = await getJson("data/suche.json");
-  const rows = data.rows.map(([id, name, kreis, phone, domain]) => ({ id, name, kreis, phones: phone ? phone.split(" ") : [], domains: domain ? domain.split(" ") : [] }));
+  const rows = data.rows.map(([id, name, kreis, phone, domain, plz]) => ({ id, name, kreis, plz: plz || "",
+    phones: phone ? phone.split(" ") : [], domains: domain ? domain.split(" ") : [] }));
   const byPhone = new Map(), byDomain = new Map(), byToken = new Map();
   rows.forEach((r, i) => {
     for (const p of r.phones) byPhone.set(p, [...(byPhone.get(p) || []), i]);
@@ -79,11 +115,11 @@ async function getSearchIndex() {
     for (const t of r.tokens) { if (!byToken.has(t)) byToken.set(t, []); byToken.get(t).push(i); }
   });
   const idf = (t) => Math.log(rows.length / (byToken.get(t)?.length || 1));
-  searchIndex = { rows, byPhone, byDomain, byToken, idf };
+  searchIndex = { rows, byPhone, byDomain, byToken, idf, plz: data.plz || {} };
   return searchIndex;
 }
 
-// Betriebe aus den Daten, die zum Foto passen (Telefon/Domain sicher, Name unscharf)
+// Betriebe aus den Daten, die zum Foto passen (Telefon/Domain sicher, Name unscharf, PLZ als Bestätigung)
 function findCandidates(ix, found, text) {
   const hits = new Map(); // row index -> {score, why}
   const add = (i, score, why) => {
@@ -101,7 +137,8 @@ function findCandidates(ix, found, text) {
   for (const d of found.domains) for (const i of ix.byDomain.get(d) || []) add(i, 100, "Website");
   const minGot = Math.min(6, 0.5 * Math.log(ix.rows.length)); // mindestens ein seltener Namensbestandteil
   const partial = new Map(); // row index -> Map(token -> Gewicht)
-  for (const [word, t, weight] of matchTokens(ix, new Set(nameTokens(text)))) {
+  const words = new Set(nameTokens(text + " " + found.domains.map((d) => d.split(".")[0]).join(" ")));
+  for (const [, t, weight] of matchTokens(ix, words)) {
     for (const i of ix.byToken.get(t)) {
       if (!partial.has(i)) partial.set(i, new Map());
       const m = partial.get(i);
@@ -114,10 +151,19 @@ function findCandidates(ix, found, text) {
     const total = r.tokens.reduce((s, t) => s + ix.idf(t), 0);
     if (got >= minGot && got / total >= 0.7) add(i, Math.round(40 * got / total + got), "Name");
   }
-  return [...hits.entries()]
-    .sort((a, b) => b[1].score - a[1].score)
-    .slice(0, 6)
-    .map(([i, h]) => ({ ...ix.rows[i], why: h.why }));
+  if (found.plz) {
+    for (const [i, h] of hits) {
+      const r = ix.rows[i];
+      if (r.plz === found.plz) add(i, 60, "PLZ");
+      else if (found.kreis && r.kreis !== found.kreis) h.score -= 30; // anderer Kreis als auf dem Foto
+    }
+  }
+  const sorted = [...hits.entries()].sort((a, b) => b[1].score - a[1].score);
+  const top = sorted[0]?.[1].score || 0;
+  return sorted
+    .filter(([, h]) => h.score >= top * 0.5 && h.score > 0)
+    .slice(0, 5)
+    .map(([i, h]) => ({ ...ix.rows[i], why: h.why, sure: h.why.some((w) => w !== "Name") }));
 }
 
 // Wörter vom Foto auf Namensbestandteile abbilden – exakt oder mit kleinen Lesefehlern
@@ -190,6 +236,25 @@ function scaled(img, max, type = "image/jpeg", quality = 0.85) {
   return type ? c.toDataURL(type, quality) : c;
 }
 
+// Graustufen mit kräftigem Kontrast, wahlweise invertiert
+function contrastCopy(src, invert) {
+  const c = document.createElement("canvas");
+  c.width = src.width;
+  c.height = src.height;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const px = img.data;
+  for (let i = 0; i < px.length; i += 4) {
+    let g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    g = Math.max(0, Math.min(255, (g - 128) * 1.6 + 128));
+    if (invert) g = 255 - g;
+    px[i] = px[i + 1] = px[i + 2] = g;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
 function addPhotos(files) {
   for (const file of files) {
     if (!file.type.startsWith("image/")) continue;
@@ -213,17 +278,29 @@ async function processQueue() {
         job.thumb = scaled(img, 360, "image/jpeg", 0.6);
         renderQueue();
         const [worker, ix] = await Promise.all([getOcrWorker(), getSearchIndex()]);
-        const { data } = await worker.recognize(scaled(img, 2000, null));
-        job.text = data.text.trim();
-        job.found = extractFromText(job.text, data.lines || []);
+        // Zwei Durchgänge: normal und invertiert (helle Schrift auf dunklem Grund)
+        const big = scaled(img, 3200, null);
+        const texts = [], lines = [];
+        for (const [n, canvas] of [[1, big], [2, contrastCopy(big, true)]]) {
+          job.pass = n;
+          const { data } = await worker.recognize(canvas);
+          texts.push(data.text.trim());
+          lines.push(...(data.lines || []));
+        }
+        job.text = texts.join("\n");
+        job.found = extractFromText(job.text, lines, ix.plz);
         job.candidates = findCandidates(ix, job.found, job.text);
         job.form = {
-          name: job.found.names[0] || "", category: "", kreis: $("#kreis").value, address: "",
-          phone: job.found.phones[0] || "", website: job.found.domains[0] || "", email: job.found.emails[0] || "",
+          name: job.found.names[0] || "", category: "", kreis: job.found.kreis || $("#kreis").value,
+          address: job.found.address, phone: job.found.phones[0] || "", website: job.found.domains[0] || "",
+          email: job.found.emails[0] || "",
         };
+        job.ocrForm = { ...job.form };
         job.match = "";
         job.status = "done";
-        if (job.candidates.length) await pickCandidate(job, job.candidates[0].id); // Vorschlag, wird vor dem Speichern geprüft
+        // Sicherer Treffer (Telefon, Website oder PLZ) wird vorausgewählt, reiner Namenstreffer nur vorgeschlagen
+        if (job.candidates[0]?.sure) await pickCandidate(job, job.candidates[0].id);
+        else if (job.candidates[0]) job.form.name = job.candidates[0].name;
       } catch (err) {
         job.status = "error";
         job.error = err.message || String(err);
@@ -254,15 +331,16 @@ async function pickCandidate(job, id) {
     if (!l) return;
     job.lead = l;
     Object.assign(job.form, {
-      name: l.name, category: l.category || "", kreis: cand.kreis, address: l.address || l.city || "",
-      phone: l.phone || job.form.phone, website: l.website || job.form.website, email: l.email || job.form.email,
+      name: l.name, category: l.category || "", kreis: cand.kreis, address: l.address || job.found.address || l.city || "",
+      phone: job.ocrForm.phone || l.phone || "", website: job.ocrForm.website || l.website || "",
+      email: job.ocrForm.email || l.email || "",
     });
   } catch (_) { /* Kreisdaten fehlen – Formular bleibt wie erkannt */ }
 }
 
 function updateJobProgress(job) {
   const el = document.querySelector(`[data-job="${job.key}"] .progress`);
-  if (el) el.textContent = `Texterkennung … ${job.progress} %`;
+  if (el) el.textContent = `Texterkennung (Durchgang ${job.pass || 1}/2) … ${job.progress} %`;
 }
 
 const catOptions = (sel) => `<option value="">– Branche wählen –</option>` + state.meta.categories.map((c) =>
@@ -275,7 +353,7 @@ function jobHtml(job) {
   if (job.status === "wait" || job.status === "ocr") {
     return `<div class="job" data-job="${job.key}">${img}<div class="job-body">
       <div class="progress">${job.status === "wait" ? "Wartet …" : `Texterkennung … ${job.progress || 0} %`}</div>
-      <div class="hint">Beim ersten Foto wird die Texterkennung geladen (ca. 5 MB).</div></div></div>`;
+      <div class="hint">Beim ersten Foto wird die Texterkennung geladen (ca. 5 MB). Pro Foto dauert es einige Sekunden.</div></div></div>`;
   }
   if (job.status === "error") {
     return `<div class="job" data-job="${job.key}">${img}<div class="job-body">
@@ -285,7 +363,7 @@ function jobHtml(job) {
   const chips = [...f.phones.map((p) => `☎ ${p}`), ...f.domains.map((d) => `🌐 ${d}`), ...f.emails.map((e) => `✉ ${e}`)]
     .map((c) => `<span class="badge topic">${esc(c)}</span>`).join("") || `<span class="sub">keine Telefonnummer/Website erkannt</span>`;
   const cands = job.candidates.map((c) => `<label class="check"><input type="radio" name="m-${job.key}" value="${esc(c.id)}" ${job.match === c.id ? "checked" : ""}>
-      <span><b>${esc(c.name)}</b> <span class="sub">${esc(kreisName(c.kreis))} · erkannt über ${c.why.join(" + ")}${c.why.length === 1 && c.why[0] === "Name" ? " – bitte prüfen" : ""}</span></span></label>`).join("");
+      <span><b>${esc(c.name)}</b> <span class="sub">${esc(kreisName(c.kreis))} · erkannt über ${c.why.join(" + ")}${c.sure ? "" : " – bitte prüfen"}</span></span></label>`).join("");
   const v = job.form;
   return `<div class="job" data-job="${job.key}">${img}<div class="job-body">
     <div class="found">${chips}</div>
@@ -324,7 +402,7 @@ function renderQueue() {
     card.querySelectorAll("[data-f]").forEach((inp) => (inp.oninput = () => (job.form[inp.dataset.f] = inp.value)));
     card.querySelectorAll("input[type=radio]").forEach((r) => (r.onchange = async () => {
       if (r.value) await pickCandidate(job, r.value);
-      else { job.match = ""; job.lead = null; }
+      else { job.match = ""; job.lead = null; job.form = { ...job.ocrForm }; }
       renderQueue();
     }));
   });

@@ -11,9 +11,11 @@ Daten des letzten erfolgreichen Laufs (von --previous) weiterverwendet.
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import urllib.request
+from collections import Counter
 from datetime import date
 
 from . import news, osmimport, stroeer
@@ -67,12 +69,36 @@ def norm_domain(value):
     return "" if "." not in value or value in WEBMAIL else value
 
 
+def plz_of(lead):
+    m = re.search(r"\b(\d{5})\b", lead.get("address") or "")
+    return m.group(1) if m else ""
+
+
 def search_row(lead, ags):
-    """Eintrag im Suchindex für den Abgleich mit Fotos (Name, Telefon, Domain)."""
+    """Eintrag im Suchindex für den Abgleich mit Fotos (Name, Telefon, Domain, PLZ)."""
     phones = {norm_phone(p) for p in (lead.get("phone") or "").split(";")}
     domains = {norm_domain(lead.get(k) or "") for k in ("website", "email")}
     return [lead["id"], lead.get("name", ""), ags, " ".join(sorted(p for p in phones if p)),
-            " ".join(sorted(d for d in domains if d))]
+            " ".join(sorted(d for d in domains if d)), plz_of(lead)]
+
+
+def plz_table(rows_by_kreis):
+    """PLZ -> [Kreis, Ort] nach Mehrheit der Betriebe (zum Einordnen von Adressen auf Fotos)."""
+    votes = {}
+    for ags, rows in rows_by_kreis:
+        for lead in rows:
+            plz = plz_of(lead)
+            if plz:
+                votes.setdefault(plz, Counter())[(ags, lead.get("city") or "")] += 1
+    table = {}
+    for plz, counter in votes.items():
+        kreis = Counter()
+        for (ags, _), n in counter.items():
+            kreis[ags] += n
+        best = kreis.most_common(1)[0][0]
+        city = Counter({c: n for (a, c), n in counter.items() if a == best and c}).most_common(1)
+        table[plz] = [best, city[0][0] if city else ""]
+    return table
 
 
 def fetch_previous(base, path):
@@ -188,7 +214,7 @@ def main(argv=None):
     leads_by_kreis, boundaries = osmimport.load(args.pbf)
     stroeer_by_kreis = export_stroeer(boundaries, args.skip_stroeer)
 
-    status, updated, index = {}, 0, []
+    status, updated, index, all_rows = {}, 0, [], []
     for ags, kreis in KREISE.items():
         leads = leads_by_kreis.get(ags) or []
         previous = fetch_previous(args.previous, f"data/kreis/{ags}.json")
@@ -203,12 +229,14 @@ def main(argv=None):
             status[ags] = keep_previous(ags, args.out, previous)
             rows = (previous or {}).get("leads") or []
         index.extend(search_row(l, ags) for l in rows if l.get("id"))
+        all_rows.append((ags, rows))
         status[ags]["news"] = export_news(ags, args.out, args.previous, today)
         status[ags]["stroeer"] = write_stroeer(ags, args.out, args.previous, today, stroeer_by_kreis)
         print(f"{kreis['name']}: {status[ags]['count']} Betriebe, {status[ags]['news']} Meldungen, "
               f"{status[ags]['stroeer']} Ströer-Flächen", flush=True)
 
-    write(args.out, "data/suche.json", {"fields": ["id", "name", "kreis", "phone", "domain"], "rows": index})
+    write(args.out, "data/suche.json", {"fields": ["id", "name", "kreis", "phone", "domain", "plz"], "rows": index,
+                                        "plz": plz_table(all_rows)})
     write(args.out, "data/meta.json", {
         "generated": today,
         "kreise": list(KREISE.values()),

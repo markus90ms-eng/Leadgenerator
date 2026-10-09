@@ -234,8 +234,9 @@ class WebExportTest(unittest.TestCase):
             self.assertEqual((item["typ"], item["id"], item["paechter"]), ("GF", "368000022377402", "368"))
             self.assertNotIn("preis", item)
             with open(os.path.join(out, "data/suche.json"), encoding="utf-8") as fh:
-                names = {r[1] for r in json.load(fh)["rows"]}
-            self.assertIn("Autohaus Müller", names)
+                index = json.load(fh)
+            self.assertIn("Autohaus Müller", {r[1] for r in index["rows"]})
+            self.assertEqual(index["plz"]["71034"], ["08115", "Böblingen"])
 
     def test_search_index_normalizes_contacts(self):
         from leadgen.webexport import norm_domain, norm_phone, search_row
@@ -246,7 +247,7 @@ class WebExportTest(unittest.TestCase):
         self.assertEqual(norm_domain("info@gmx.de"), "")
         row = search_row({"id": "osm:node/1", "name": "X", "phone": "+49 711 123; 07031 222",
                           "email": "a@firma.de", "website": "firma.de"}, "08115")
-        self.assertEqual(row, ["osm:node/1", "X", "08115", "07031222 0711123", "firma.de"])
+        self.assertEqual(row, ["osm:node/1", "X", "08115", "07031222 0711123", "firma.de", ""])
 
     def test_first_seen_ignores_empty_or_baseline_data(self):
         from leadgen.webexport import carry_first_seen
