@@ -31,12 +31,14 @@ function sfcBadge(l) {
   const owner = m?.owner ? ` (${esc(m.owner)})` : "";
   const tip = esc(r.note || "");
   const link = m?.url ? ` <a href="${esc(m.url)}" target="_blank" rel="noopener">öffnen</a>` : "";
+  const act = m?.last_activity ? `<span class="badge chain" title="Letzte Aktivität im Account">${m.tage_ohne_aktivitaet > 90 ? "⏳ " : ""}letzte Aktivität ${fmtDate(m.last_activity)}</span>` : "";
   switch (r.status) {
     case "frei": return `<span class="badge new" title="${tip}">✓ Nicht in Salesforce</span>`;
-    case "potenzial": return `<span class="badge new" title="${tip}">✓ Potenzial-Account, keine Sperre${owner}</span>${link}`;
-    case "ruhend": return `<span class="badge topic" title="${tip}">⏳ Ex-Kunde / inaktiv${owner}</span>${link}`;
-    case "vergeben": return `<span class="badge taken" title="${tip}">🔒 Nicht kontaktieren (Sperre oder Kunde)${owner}</span>${link}`;
-    case "unklar": return `<span class="badge chain" title="${tip}">? In Salesforce, Details unklar${owner}</span>${link}`;
+    case "potenzial": return `<span class="badge new" title="${tip}">✓ Potenzial-Account, nicht gesperrt${owner}</span>${act}${link}`;
+    case "kunde": return `<span class="badge topic" title="${tip}">👤 Bestandskunde, nicht gesperrt${owner}</span>${act}${link}`;
+    case "ruhend": return `<span class="badge topic" title="${tip}">⏳ Ex-Kunde / inaktiv, nicht gesperrt${owner}</span>${act}${link}`;
+    case "vergeben": return `<span class="badge taken" title="${tip}">🔒 Gesperrt, nicht kontaktieren${owner}</span>${act}${link}`;
+    case "unklar": return `<span class="badge chain" title="${tip}">? Account gefunden, bitte prüfen${owner}</span>${act}${link}`;
     default: return `<span class="badge chain" title="${tip}">⚠ Abgleich fehlgeschlagen</span>`;
   }
 }
@@ -45,7 +47,9 @@ function sfcMatches(l) {
   const f = $("#sfc-filter").value;
   if (!f) return true;
   const r = sfc.results[l.id];
-  return f === "ungeprueft" ? !r : !!r && r.status === f;
+  if (f === "ungeprueft") return !r;
+  if (f === "inaktiv3m") return !!r && (r.matches?.[0]?.tage_ohne_aktivitaet ?? -1) > 90;
+  return !!r && r.status === f;
 }
 
 async function sfcRun() {

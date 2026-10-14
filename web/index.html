@@ -42,7 +42,7 @@
       <label class="btn sf-csv" for="sf-csv" style="display:block;text-align:center">CSV importieren</label>
       <input type="file" id="sf-csv" accept=".csv,text/csv" hidden>
       <div class="stand" id="sf-info"></div>
-      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 9</span></p>
+      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 10</span></p>
     </section>
 
     <section class="only-salesforce" id="sf-filters">
@@ -123,9 +123,11 @@
       <select id="sfc-filter">
         <option value="">alle</option>
         <option value="frei">nicht in Salesforce</option>
-        <option value="potenzial">Potenzial-Account, keine Sperre</option>
-        <option value="ruhend">Ex-Kunde / inaktiv</option>
-        <option value="vergeben">gesperrt oder Kunde (nicht kontaktieren)</option>
+        <option value="potenzial">Potenzial-Account, nicht gesperrt</option>
+        <option value="kunde">Bestandskunde, nicht gesperrt</option>
+        <option value="ruhend">Ex-Kunde / inaktiv, nicht gesperrt</option>
+        <option value="vergeben">gesperrt (nicht kontaktieren)</option>
+        <option value="inaktiv3m">Account, seit über 3 Monaten keine Aktivität</option>
         <option value="unklar">Account, Details unklar</option>
         <option value="ungeprueft">noch nicht geprüft</option>
       </select>
