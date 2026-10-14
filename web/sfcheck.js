@@ -33,8 +33,9 @@ function sfcBadge(l) {
   const link = m?.url ? ` <a href="${esc(m.url)}" target="_blank" rel="noopener">öffnen</a>` : "";
   switch (r.status) {
     case "frei": return `<span class="badge new" title="${tip}">✓ Nicht in Salesforce</span>`;
-    case "ruhend": return `<span class="badge topic" title="${tip}">⏳ Account, lange nicht betreut${owner}</span>${link}`;
-    case "vergeben": return `<span class="badge taken" title="${tip}">🔒 In Salesforce${owner}</span>${link}`;
+    case "potenzial": return `<span class="badge new" title="${tip}">✓ Potenzial-Account, keine Sperre${owner}</span>${link}`;
+    case "ruhend": return `<span class="badge topic" title="${tip}">⏳ Ex-Kunde / inaktiv${owner}</span>${link}`;
+    case "vergeben": return `<span class="badge taken" title="${tip}">🔒 Nicht kontaktieren (Sperre oder Kunde)${owner}</span>${link}`;
     case "unklar": return `<span class="badge chain" title="${tip}">? In Salesforce, Details unklar${owner}</span>${link}`;
     default: return `<span class="badge chain" title="${tip}">⚠ Abgleich fehlgeschlagen</span>`;
   }
