@@ -3,12 +3,20 @@
 // Die Kundendaten werden nur im Speicher dieser Seite gehalten, nie gespeichert oder hochgeladen.
 
 const SF_API = "http://127.0.0.1:8766";
-const sf = { state: "", message: "", rows: [], source: "", updated: "", hasBookings: false, running: false, online: null, loggedIn: false, error: "", log: [], limit: 300, sort: { key: "score", dir: -1 } };
+const sf = { netError: "", state: "", message: "", rows: [], source: "", updated: "", hasBookings: false, running: false, online: null, loggedIn: false, error: "", log: [], limit: 300, sort: { key: "score", dir: -1 } };
 
 async function sfCall(path, method = "GET") {
-  const r = await fetch(SF_API + path, { method, cache: "no-store" });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch(SF_API + path, { method, cache: "no-store", signal: ctl.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status + (r.status === 409 ? " (läuft bereits)" : ""));
+    return await r.json();
+  } catch (e) {
+    throw new Error(e.name === "AbortError" ? "keine Antwort nach 15 Sekunden" : e.message);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sfInfo(text, cls) {
@@ -38,8 +46,9 @@ async function sfRefresh() {
       Object.assign(sf, { rows: res.rows.map(sfEnrich), source: res.source, updated: res.updated, hasBookings: !!res.has_bookings });
       sfFillSelects();
     }
-  } catch (_) {
+  } catch (e) {
     sf.online = false;
+    sf.netError = sf.netError || e.message;
     sf.running = false;
     $("#sf-login").hidden = true;
     $("#sf-run").disabled = false;
@@ -50,19 +59,24 @@ async function sfRefresh() {
 }
 
 async function sfStart(path) {
+  // sofort sichtbar reagieren, dann erst die Anfrage senden
+  sf.running = true;
+  sf.state = "running";
+  sf.log = ["Starte ..."];
+  sf.netError = "";
+  $("#sf-run").disabled = true;
+  sfInfo("Starte …");
+  render();
   try {
     await sfCall(path, "POST");
-    sf.running = true;
-    sf.state = "running";
-    sf.log = [];
-    $("#sf-run").disabled = true;
-    sfInfo("Gestartet …");
-    render();
     setTimeout(sfRefresh, 800);
   } catch (e) {
-    sf.online = false;
-    sfInfo("");
-    render();
+    sf.running = false;
+    sf.state = "";
+    sf.netError = e.message;
+    $("#sf-run").disabled = false;
+    sfInfo("Fehler: " + e.message, "warn");
+    sfRefresh();
   }
 }
 
@@ -134,6 +148,7 @@ function renderSalesforceInner() {
         <li>Hier auf <b>Liste erstellen</b> klicken.</li>
       </ol>
       <button id="sf-retry">Erneut verbinden</button>
+      ${sf.netError ? `<p class="hint">Technische Meldung: ${esc(sf.netError)}</p>` : ""}
       <p class="hint">Wenn der Browser nach dem „Zugriff auf Geräte im lokalen Netzwerk“ fragt, bitte erlauben. Das ist dein eigener Rechner.</p></div>`;
     $("#sf-retry").onclick = () => { sf.online = null; sfRefresh(); };
     return;
