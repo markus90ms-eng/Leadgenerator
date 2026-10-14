@@ -336,7 +336,7 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["eigene", "search", "new", "news", "pipeline"].includes(startTab) ? startTab : "search");
+  switchTab(["eigene", "search", "new", "news", "pipeline", "salesforce"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
@@ -417,7 +417,9 @@ function switchTab(tab) {
     el.hidden = !el.classList.contains("only-" + tab);
   });
   $("#export").hidden = tab === "news";
-  $("#toggle-map").hidden = tab === "news";
+  $("#toggle-map").hidden = tab === "news" || tab === "salesforce";
+  $("#sfc-run").hidden = tab === "news" || tab === "salesforce";
+  if (tab === "salesforce") $("#map").hidden = true;
   renderQueue();
   render();
   if (tab === "eigene") ensureOwnKreise().then(() => state.tab === "eigene" && render());
@@ -493,6 +495,7 @@ function filtered(rows) {
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
     (state.tab !== "pipeline" || !status || l.status === status) &&
     (!$("#only-near").checked || l.near_count > 0) &&
+    sfcMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
   const { key, dir } = state.sort;
@@ -505,6 +508,7 @@ function filtered(rows) {
 function render() {
   if (!state.meta) return;
   if (state.tab === "news") return renderNews();
+  if (state.tab === "salesforce") return renderSalesforce();
   const all = currentRows();
   const rows = filtered(all);
   state.visible = rows;
@@ -574,6 +578,7 @@ function rowHtml(l) {
     l.chain ? `<span class="badge chain">Kette${l.brand ? ": " + esc(l.brand) : ""}</span>` : "",
     l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
     l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
+    sfcBadge(l),
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
@@ -719,6 +724,7 @@ function download(name, content, type) {
 }
 
 function exportCsv() {
+  if (state.tab === "salesforce") return exportSalesforce();
   const rows = state.visible || [];
   if (!rows.length) return message("Keine Daten zum Exportieren.");
   const fields = [

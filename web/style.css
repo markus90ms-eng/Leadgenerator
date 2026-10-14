@@ -143,3 +143,15 @@ img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border
 .cat-subs { padding-left: 22px; }
 .cat-subs label { font-size: 13px; }
 .badge.pt { background: #eef3ea; color: #3d6b1f; }
+.sf-empty { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+.sf-empty h3 { margin: 0 0 8px; }
+.sf-empty ol { padding-left: 20px; }
+.sf-log { background: #f4f5f7; padding: 10px; border-radius: 6px; max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
+.sf-warn, .warn { color: var(--warn); }
+.sf-warn { background: var(--warn-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
+.stand.warn { color: var(--warn); }
+.sf-ok { background: var(--good-soft); color: var(--good); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
+.sf-banner { margin-bottom: 12px; }
+aside label.btn.sf-csv { font-weight: 600; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; margin: 8px 0 0; }
+aside label.btn.sf-csv:hover { border-color: var(--accent); }
+.badge.taken { background: #fde8e6; color: var(--bad); }

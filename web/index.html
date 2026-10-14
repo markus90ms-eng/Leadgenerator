@@ -17,6 +17,7 @@
     <button data-tab="new">Neugründungen</button>
     <button data-tab="news">News-Radar</button>
     <button data-tab="pipeline">Meine Pipeline</button>
+    <button data-tab="salesforce">Salesforce</button>
   </nav>
 </header>
 
@@ -30,6 +31,55 @@
       </label>
       <input type="file" id="photo-input" accept="image/*" multiple hidden>
       <p class="hint">Die Texterkennung läuft direkt in deinem Browser. Telefonnummer, Website und Firmenname werden mit allen Betrieben in Baden-Württemberg abgeglichen. Die Fotos bleiben auf deinem Gerät.</p>
+    </section>
+
+    <section class="only-salesforce">
+      <label for="sf-liste">Listenansicht (ID oder Name)</label>
+      <input type="search" id="sf-liste" placeholder="leer = Alle Accounts, z. B. 00B5g00000AbCdE">
+      <label class="check"><input type="checkbox" id="sf-headed"> Browser sichtbar (zur Fehlersuche)</label>
+      <button class="primary" id="sf-run">Liste erstellen</button>
+      <button id="sf-login" hidden style="width:100%;margin-top:8px">Bei Salesforce einloggen</button>
+      <label class="btn sf-csv" for="sf-csv" style="display:block;text-align:center">CSV importieren</label>
+      <input type="file" id="sf-csv" accept=".csv,text/csv" hidden>
+      <div class="stand" id="sf-info"></div>
+      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 11</span></p>
+    </section>
+
+    <section class="only-salesforce" id="sf-filters">
+      <label for="sf-text">Stadt oder PLZ</label>
+      <input type="search" id="sf-text" placeholder="z. B. Stuttgart, 70, 88045">
+      <label for="sf-idle">Keine Betreuung (Aktivität) seit</label>
+      <select id="sf-idle">
+        <option value="0">egal</option>
+        <option value="1">1 Monat</option>
+        <option value="2">2 Monaten</option>
+        <option value="3" selected>3 Monaten</option>
+        <option value="6">6 Monaten</option>
+        <option value="12">12 Monaten</option>
+      </select>
+      <label class="check"><input type="checkbox" id="sf-booked"> schon einmal gebucht (Ex-Kunden)</label>
+      <label for="sf-lastbook">Letzte Buchung länger her als</label>
+      <select id="sf-lastbook">
+        <option value="0">egal</option>
+        <option value="6">6 Monate</option>
+        <option value="12">12 Monate</option>
+        <option value="24">24 Monate</option>
+      </select>
+      <label for="sf-minrev">Bisheriger Umsatz mindestens</label>
+      <select id="sf-minrev">
+        <option value="0">egal</option>
+        <option value="1000">1.000 €</option>
+        <option value="10000">10.000 €</option>
+        <option value="50000">50.000 €</option>
+        <option value="100000">100.000 €</option>
+      </select>
+      <label for="sf-owner">Betreuer</label>
+      <select id="sf-owner"><option value="">alle</option></select>
+      <label for="sf-branche">Branche</label>
+      <select id="sf-branche"><option value="">alle</option></select>
+      <label for="sf-minscore">Mindest-Potenzial: <b id="sf-minscore-val">0</b></label>
+      <input type="range" id="sf-minscore" min="0" max="100" step="5" value="0">
+      <p class="hint">Potenzial (0–100): bisheriger Umsatz, Ex-Kunde, Zeit seit der letzten Buchung, fehlende Betreuung und Firmengröße. Mit der Maus über die Zahl fahren, um die Gründe zu sehen.</p>
     </section>
 
     <section class="only-search only-new only-news">
@@ -70,6 +120,21 @@
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
       <input type="search" id="text" placeholder="Name, Ort, Straße …">
       <select id="status-filter" class="only-pipeline"><option value="">Alle Status</option></select>
+      <label for="sfc-filter">Salesforce-Abgleich</label>
+      <select id="sfc-filter">
+        <option value="">alle</option>
+        <option value="frei">nicht in Salesforce</option>
+        <option value="potenzial">Potenzial-Account, nicht gesperrt</option>
+        <option value="kunde">Bestandskunde, nicht gesperrt</option>
+        <option value="ruhend">Ex-Kunde / inaktiv, nicht gesperrt</option>
+        <option value="vergeben">gesperrt (nicht kontaktieren)</option>
+        <option value="inaktiv3m">Account, letzter Kontakt über 3 Monate her</option>
+        <option value="inaktiv6m">Account, letzter Kontakt über 6 Monate her</option>
+        <option value="inaktiv12m">Account, letzter Kontakt über 12 Monate her</option>
+        <option value="kontakt_unbekannt">Account, Kontaktdatum nicht lesbar</option>
+        <option value="unklar">Account, Details unklar</option>
+        <option value="ungeprueft">noch nicht geprüft</option>
+      </select>
     </section>
 
     <section class="only-search only-new only-pipeline only-eigene">
@@ -112,6 +177,7 @@
     <div class="toolbar">
       <div id="summary">Lade Daten …</div>
       <div class="actions">
+        <button id="sfc-run" title="Prüft die angezeigten Betriebe in Salesforce: schon Account? Inhaber? Frei?">Mit Salesforce abgleichen</button>
         <button id="toggle-map">Karte</button>
         <button id="export">CSV-Export</button>
       </div>
@@ -125,6 +191,8 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="eigene.js"></script>
+<script src="salesforce.js"></script>
+<script src="sfcheck.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
