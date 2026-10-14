@@ -10,7 +10,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from leadgen import news, overpass, overture, service, stroeer  # noqa: E402
+from leadgen import news, overpass, overture, service, stroeer, webcheck  # noqa: E402
 from leadgen.categories import CATEGORIES, GROUPS, classify, classify_overture  # noqa: E402
 from leadgen.db import Store  # noqa: E402
 from leadgen.regions import KREISE  # noqa: E402
@@ -73,6 +73,22 @@ OVERTURE_ROWS = [
 
 def fake_overture_read(log=print, **kw):
     return [l for l in map(overture.place_to_lead, OVERTURE_ROWS) if l], "test"
+
+
+WEB_PAGES = {
+    "https://bickelgmbh.de/": '<a href="/impressum">Impressum</a> <a href="/karriere">Karriere</a> '
+                              '<a href="https://www.instagram.com/bickel/">Insta</a> In den Warenkorb',
+    "https://bickelgmbh.de/impressum": "<p>Bickel GmbH</p><p>Registergericht: AG Stuttgart HRB 102030</p>"
+                                       "<p>Stammkapital: 50.000 €</p>",
+    "https://bickelgmbh.de/karriere": "<ul><li>Anlagenmechaniker SHK (m/w/d)</li><li>Kundendienst (w/m/d)</li></ul>",
+    "https://autohaus-mueller.de/": "<p>Willkommen</p>",
+    "https://autohaus-mueller.de/robots.txt": "User-agent: *\nDisallow: /",
+}
+
+
+def fake_web_fetch(url, timeout=10):
+    page = WEB_PAGES.get(url)
+    return (url, page) if page else None
 
 
 def fake_stroeer_get(params):
@@ -259,6 +275,7 @@ class WebExportTest(unittest.TestCase):
             prev = {"updated": "2026-01-01", "leads": [{"id": "osm:node/10", "first_seen": ""}]}
             with mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
                     mock.patch.object(overture, "read_places", fake_overture_read), \
+                    mock.patch.object(webcheck, "fetch", fake_web_fetch), \
                     mock.patch.object(webexport, "fetch_previous",
                                       lambda base, path: prev if path == "data/kreis/08115.json" else None):
                 with mock.patch.object(stroeer.Client, "get", side_effect=fake_stroeer_get):
@@ -277,6 +294,12 @@ class WebExportTest(unittest.TestCase):
             self.assertNotIn("first_seen", bickel)
             self.assertEqual(leads["Maler Klein"]["u"], 1)
             self.assertFalse({"Alter Laden", "Geldautomat", "Draußen GmbH"} & set(leads))
+            # Rechtsform aus dem Namen, Signale aus dem Website-Check
+            self.assertEqual(bickel["rf"], "GmbH")
+            self.assertEqual(bickel["ws"], {"rf": "GmbH", "hr": 1, "kap": 50000, "kar": 1, "jobs": 2, "shop": 1, "soc": 1})
+            self.assertNotIn("ws", leads["Autohaus Müller"])  # robots.txt sperrt
+            with open(os.path.join(out, "data/web", webcheck.shard_of("autohaus-mueller.de") + ".json"), encoding="utf-8") as fh:
+                self.assertEqual(json.load(fh)["sites"]["autohaus-mueller.de"]["rb"], 1)
             self.assertTrue(os.path.exists(os.path.join(out, "index.html")))
             with open(os.path.join(out, "data/meta.json"), encoding="utf-8") as fh:
                 status = json.load(fh)["status"]
@@ -303,6 +326,13 @@ class WebExportTest(unittest.TestCase):
         row = search_row({"id": "osm:node/1", "name": "X", "phone": "+49 711 123; 07031 222",
                           "email": "a@firma.de", "website": "firma.de"}, "08115")
         self.assertEqual(row, ["osm:node/1", "X", "08115", "07031222 0711123", "firma.de", ""])
+
+    def test_webcheck_legal_form(self):
+        self.assertEqual(webcheck.legal_form("Müller GmbH & Co. KG"), "GmbH & Co. KG")
+        self.assertEqual(webcheck.legal_form("Registergericht: AG Stuttgart, Schmid GmbH"), "GmbH")
+        self.assertEqual(webcheck.legal_form("Holz Meier UG (haftungsbeschränkt)"), "UG")
+        self.assertEqual(webcheck.legal_form("Bäckerei Schmid"), "")
+        self.assertEqual(webcheck.domain_of("https://www.Bickel-GmbH.de/kontakt"), "bickel-gmbh.de")
 
     def test_overture_phone_and_merge(self):
         self.assertEqual(overture.norm_phone("04971 31570001"), "07131570001")

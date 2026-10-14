@@ -192,7 +192,7 @@ _CATEGORIES = [
     ("kiosk", "Kiosk, Tabak & Lotto", "lebensmittel", 18,
      [("shop", "^(kiosk|tobacco|e-cigarette|lottery|newsagent)$")],
      ["kiosk", "tobacco_shop", "smoke_and_vape_store", "lottery_vendor", "newspaper_and_magazines_store"]),
-    ("supermarkt", "Supermarkt & Lebensmittelmarkt", "lebensmittel", 12,
+    ("supermarkt", "Supermarkt & Lebensmittelmarkt", "lebensmittel", 20,
      [("shop", "^(supermarket|convenience)$")],
      ["grocery_store", "convenience_store", "discount_store", "warehouse_club_store", "asian_grocery_store",
       "food_and_beverage_store"]),

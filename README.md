@@ -11,6 +11,10 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 - **Karte** mit allen Treffern
 - **Pitch mit Claude** – Knopf pro Betrieb öffnet claude.ai mit einer fertigen Anfrage (Firmendaten, Ströer-Flächen in der Nähe, Gesprächsleitfaden); Claude sieht sich die Website an und schreibt einen individuellen Telefonpitch inkl. Einwandbehandlung.
 - **Eigene Leads aus Fotos** – Fotos von Fahrzeug-, Schild- oder Plakatwerbung hochladen (auch mehrere, am Handy direkt aus Kamera/Galerie). Die Texterkennung läuft im Browser, erkennt Telefonnummer, Website, E-Mail und Firmenname und gleicht sie mit allen Betrieben in BW ab. Nach kurzer Prüfung wird daraus ein Lead mit Ströer-Flächen, Score, Pipeline und Pitch-Knopf. Die Fotos bleiben auf dem Gerät.
+- **Größe & Ampel** – geschätzte Unternehmensgröße (S/M/L) aus Rechtsform, Anzahl Standorte und Website-Angaben; Ampel (grün/gelb/rot) aus Aktivitätssignalen wie „sucht Personal“, Online-Shop, Social Media. Filter „ab mittel“, „nur grün“, „sucht Personal“. Edeka, Rewe & Co. zählen als Händlerverbund (oft selbstständige Kaufleute), nicht als Kette.
+- **Website-Check** – jede Nacht werden einige Tausend Firmen-Websites geprüft (Startseite, Impressum, Karriereseite; robots.txt wird beachtet, keine Personendaten). Nach etwa zwei bis drei Wochen sind alle Websites einmal erfasst, danach wird alle 90 Tage aufgefrischt.
+- **Mail an Outlook** – Knopf „Mail“ bzw. Klick auf die E-Mail-Adresse: Vorlage wählen (nach dem Telefonat, Terminbestätigung, Unterlagen), Ansprechpartner eintragen, Text prüfen, in Outlook öffnen. Nur nach vorherigem Kontakt verwenden (UWG).
+- **Nachschlagen** – Links zu North Data, Handelsregister und Jobbörse je Betrieb.
 - **Ströer-Werbeträger im Umkreis** – zeigt pro Betrieb die Ströer-Flächen in der Nähe (Großfläche, City-Light, DOOH …), filterbar nach Trägerart, mit Kartenebene und CSV-Spalten. Quelle: öffentliche Ströer-Standortkarte; nur Ströer-eigene Flächen (Pächter 368, 252), ohne Preise.
 
 ## Web-Version (ohne Installation)

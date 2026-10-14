@@ -16,9 +16,9 @@ import shutil
 import sys
 import urllib.request
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 
-from . import news, osmimport, overture, stroeer
+from . import news, osmimport, overture, stroeer, webcheck
 from .categories import CATEGORIES, GROUPS
 from .regions import KREISE
 
@@ -42,6 +42,9 @@ def compact(lead):
         out["u"] = 1  # unsicherer Eintrag (Overture, geringe Konfidenz)
     if lead.get("operator_type") or lead.get("pt"):
         out["pt"] = lead.get("operator_type") or lead.get("pt")
+    for key in ("rf", "st", "ws"):  # Rechtsform, Standorte, Website-Signale
+        if lead.get(key):
+            out[key] = lead[key]
     if lead.get("lat") is not None:
         out["lat"], out["lon"] = round(lead["lat"], 5), round(lead["lon"], 5)
     return out
@@ -127,6 +130,66 @@ def vorwahl_table(rows_by_kreis, min_count=15, share=0.6):
         if total >= min_count and n / total >= share:
             table[prefix] = ags
     return table
+
+
+def own_domain(lead):
+    """Domain der eigenen Firmen-Website ('' bei Plattformen wie Facebook)."""
+    d = webcheck.domain_of(lead.get("website") or "")
+    return "" if not d or d in overture.PLATFORMS or d in WEBMAIL or "." not in d else d
+
+
+def add_signals(leads_by_kreis, cache):
+    """Rechtsform aus dem Namen, Anzahl Standorte je Website und Website-Signale ergänzen."""
+    count = Counter(own_domain(l) for leads in leads_by_kreis.values() for l in leads)
+    for leads in leads_by_kreis.values():
+        for lead in leads:
+            rf = webcheck.legal_form(lead.get("name"))
+            if rf:
+                lead["rf"] = rf
+            d = own_domain(lead)
+            if d and count[d] >= 2:
+                lead["st"] = count[d]
+            sig = cache.get(d) if d else None
+            if sig and not sig.get("err") and not sig.get("rb"):
+                ws = {k: v for k, v in sig.items() if k != "d"}
+                if ws:
+                    lead["ws"] = ws
+
+
+def webcheck_targets(leads_by_kreis, cache, today, recheck_days=webcheck.RECHECK_DAYS):
+    """Websites, die (wieder) geprüft werden sollen – noch nie geprüfte und
+    wichtige Branchen zuerst, Ketten und unsichere Einträge nicht."""
+    stale = (date.fromisoformat(today) - timedelta(days=recheck_days)).isoformat()
+    retry = (date.fromisoformat(today) - timedelta(days=30)).isoformat()
+    best = {}
+    for leads in leads_by_kreis.values():
+        for lead in leads:
+            d = own_domain(lead)
+            if not d or lead.get("chain") or lead.get("unsure") or lead.get("u"):
+                continue
+            prev = cache.get(d)
+            if prev and prev.get("d", "") > (retry if prev.get("err") else stale):
+                continue
+            weight = CATEGORIES.get(lead.get("category"), {}).get("weight", 20)
+            key = (prev.get("d", "") if prev else "", -weight)
+            if d not in best or key < best[d][0]:
+                best[d] = (key, lead["website"])
+    return [(d, url) for d, (key, url) in sorted(best.items(), key=lambda x: x[1][0])]
+
+
+def load_webcheck_cache(base):
+    cache = {}
+    for c in "0123456789abcdef":
+        cache.update((fetch_previous(base, f"data/web/{c}.json") or {}).get("sites") or {})
+    return cache
+
+
+def write_webcheck_cache(out, cache):
+    shards = {c: {} for c in "0123456789abcdef"}
+    for d, sig in cache.items():
+        shards[webcheck.shard_of(d)][d] = sig
+    for c, sites in shards.items():
+        write(out, f"data/web/{c}.json", {"sites": sites})
 
 
 def export_overture(boundaries, skip=False):
@@ -250,6 +313,8 @@ def main(argv=None):
     parser.add_argument("--previous", default="", help="URL der bisher veröffentlichten Seite")
     parser.add_argument("--skip-stroeer", action="store_true", help="Ströer-Standorte nicht neu abrufen")
     parser.add_argument("--skip-overture", action="store_true", help="Overture-Betriebe nicht neu abrufen")
+    parser.add_argument("--webcheck-max", type=int, default=8000, help="höchstens so viele Websites pro Lauf prüfen")
+    parser.add_argument("--webcheck-minutes", type=float, default=20, help="Zeitlimit für den Website-Check")
     args = parser.parse_args(argv)
 
     shutil.rmtree(args.out, ignore_errors=True)
@@ -264,21 +329,38 @@ def main(argv=None):
     overture_by_kreis = export_overture(boundaries, args.skip_overture)
     stroeer_by_kreis = export_stroeer(boundaries, args.skip_stroeer)
 
-    status, updated, all_rows = {}, 0, []
+    # 1. OSM und Overture je Kreis zusammenführen
+    merged, previous_by_kreis, osm_counts = {}, {}, {}
     for ags, kreis in KREISE.items():
         leads = leads_by_kreis.get(ags) or []
-        previous = fetch_previous(args.previous, f"data/kreis/{ags}.json")
+        previous = previous_by_kreis[ags] = fetch_previous(args.previous, f"data/kreis/{ags}.json")
         if overture_by_kreis is not None:
             extra = overture_by_kreis.get(ags) or []
         else:  # Overture nicht erreichbar: Einträge vom letzten Lauf weiterverwenden
             unsure = fetch_previous(args.previous, f"data/kreis/{ags}-unsicher.json") or {}
             extra = [l for l in ((previous or {}).get("leads") or []) + (unsure.get("leads") or [])
                      if l.get("id", "").startswith("ov:")]
-        osm_count = len(leads)
+        osm_counts[ags] = len(leads)
         if leads:
             leads, dupes = overture.merge(leads, extra)
-            print(f"{kreis['name']}: {osm_count} aus OSM + {len(leads) - osm_count} aus Overture "
+            merged[ags] = leads
+            print(f"{kreis['name']}: {osm_counts[ags]} aus OSM + {len(leads) - osm_counts[ags]} aus Overture "
                   f"({dupes} Dubletten zusammengeführt)", flush=True)
+
+    # 2. Website-Check (schrittweise, jede Nacht ein Teil) und Signale ergänzen
+    cache = load_webcheck_cache(args.previous)
+    if args.webcheck_max > 0:
+        targets = webcheck_targets(merged, cache, today)
+        print(f"Website-Check: {len(cache)} bekannt, {len(targets)} offen", flush=True)
+        webcheck.run(targets, cache, today, max_count=args.webcheck_max, max_seconds=args.webcheck_minutes * 60,
+                     log=lambda m: print(m, flush=True))
+    write_webcheck_cache(args.out, cache)
+    add_signals(merged, cache)
+
+    # 3. Je Kreis schreiben
+    status, updated, all_rows = {}, 0, []
+    for ags, kreis in KREISE.items():
+        leads, previous = merged.get(ags) or [], previous_by_kreis[ags]
         if leads:
             baseline = carry_first_seen(leads, previous, today)
             rows = [compact(l) for l in leads]
@@ -288,7 +370,8 @@ def main(argv=None):
             # Unsichere Einträge separat – die Seite lädt sie nur auf Wunsch
             write(args.out, f"data/kreis/{ags}-unsicher.json",
                   {"kreis": ags, "updated": today, "leads": [r for r in rows if r.get("u")]})
-            status[ags] = {"updated": today, "count": len(sure), "unsure": len(rows) - len(sure), "osm": osm_count}
+            status[ags] = {"updated": today, "count": len(sure), "unsure": len(rows) - len(sure),
+                           "osm": osm_counts[ags]}
             updated += 1
         else:
             status[ags] = keep_previous(ags, args.out, previous)
@@ -313,6 +396,7 @@ def main(argv=None):
         "media": stroeer.MEDIA,
         "media_groups": stroeer.GROUPS,
         "status": status,
+        "webcheck": {"sites": len(cache), "checked": sum(1 for v in cache.values() if not v.get("err") and not v.get("rb"))},
     })
     print(f"Fertig. {updated}/{len(KREISE)} Kreise aktualisiert.")
     return 0 if updated else 1

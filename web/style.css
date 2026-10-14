@@ -155,3 +155,26 @@ img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border
 aside label.btn.sf-csv { font-weight: 600; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; margin: 8px 0 0; }
 aside label.btn.sf-csv:hover { border-color: var(--accent); }
 .badge.taken { background: #fde8e6; color: var(--bad); }
+
+/* Ampel & Größe */
+.ampel { display: inline-flex; align-items: center; gap: 5px; cursor: help; white-space: nowrap; }
+.ampel .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.ampel .dot.g { background: #2f9e44; }
+.ampel .dot.y { background: #f2b705; }
+.ampel .dot.r { background: #d9480f; }
+.ampel .size { font-weight: 700; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.lookup { margin-top: 4px; font-size: 12px; }
+.lookup a { display: inline !important; margin-right: 6px; }
+.mail-btn { margin-top: 4px; }
+
+/* Mail-Dialog */
+#mail-dialog { border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(720px, 94vw); max-height: 92vh; }
+#mail-dialog::backdrop { background: rgba(20, 25, 35, .45); }
+.mail-form { padding: 18px 20px; display: grid; gap: 10px; }
+.mail-form h3 { margin: 0; font-size: 16px; }
+.mail-form label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.mail-form input, .mail-form select, .mail-form textarea { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 14px; color: var(--text); background: #fff; }
+.mail-form textarea { font-size: 13px; line-height: 1.45; resize: vertical; }
+.mail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.mail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mail-actions .pitch-btn { display: inline-block; margin: 0; padding: 8px 16px; }

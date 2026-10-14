@@ -74,19 +74,29 @@ function score(l, reason, near) {
   if (l.hours) parts.push([5, "Aktiv (Öffnungszeiten)"]);
   if (near?.count) parts.push([10, "Ströer-Fläche im Umkreis"]);
   if (l.chain) parts.push([-25, "Kette/Filiale (zentrales Marketing)"]);
+  if (l.ws?.jobs || l.ws?.kar) parts.push([5, "sucht Personal"]);
   if (l.pt === "privat") parts.push([10, "Privater Träger"]);
   if (l.pt === "öffentlich") parts.push([-5, "Öffentlicher Träger"]);
   const total = Math.max(0, Math.min(100, parts.reduce((s, [p]) => s + p, 0)));
   return [total, parts.map(([p, why]) => `${why} ${p > 0 ? "+" : ""}${p}`)];
 }
 
+// Marken, hinter denen meist selbstständige Kaufleute stehen (Verbund statt Filialkette)
+const VERBUND = /\b(edeka|e-?center|marktkauf|rewe|nahkauf|nah\s*(?:&|und)\s*gut|intersport|sport\s*2000|expert|euronics|ep:|electronicpartner|hagebau(?:markt)?|raiffeisen|vedes|spielwaren\s*(?:&|und)|budni|team\s*energie|kodi)\b/i;
+const isVerbund = (l) => VERBUND.test(`${l.brand || ""} ${l.name || ""}`);
+
 function enrich(l, since) {
+  // Verbund-Märkte: gemeinsame Website (z. B. edeka.de) sagt nichts über eigene Standorte
+  if (l.chain && isVerbund(l)) l = { ...l, chain: 0, verbund: 1, st: undefined };
   const reason = newReason(l, since);
   const p = state.pipeline[l.id];
   const kreis = l.kreis || p?.lead?.kreis;
   const near = nearby(l, kreis);
   const [s, reasons] = score(l, reason, near);
+  const size = sizeClass(l);
+  const am = ampel(l, reason, size);
   return { ...l, kreis, new_reason: reason, score: s, score_reasons: reasons, near, near_count: near?.count || 0,
+    size: size.cls, size_rank: size.rank, size_why: size.why, ampel: am.color, ampel_pts: am.pts, ampel_why: am.why,
     status: p?.status || "neu", notes: p?.notes || "" };
 }
 
@@ -214,6 +224,8 @@ function pitchPrompt(l) {
     l.phone ? `Telefon: ${l.phone}` : "",
     `Ströer-Flächen in der Nähe: ${flaechen}`,
     l.photo ? `Gesehen: eigene Beobachtung (Werbung auf Fahrzeug/Schild)${l.ocr ? ` – Text auf dem Foto: „${l.ocr.replace(/\s+/g, " ").slice(0, 300)}“` : ""}` : "",
+    signalText(l) ? `Signale: ${signalText(l)}` : "",
+    state.pipeline[l.id]?.contact?.name ? `Ansprechpartner: ${state.pipeline[l.id].contact.anrede || ""} ${state.pipeline[l.id].contact.name}`.replace("  ", " ") : "",
     l.new_reason ? `Besonderheit: ${l.new_reason}${l.start_date ? " (" + fmtDate(l.start_date) + ")" : ""}` : "",
   ].filter(Boolean).join("\n");
   return `Du bist mein Vertriebsassistent. Ich bin Markus Schultheiß, Ströer AG, und rufe gleich bei folgendem Unternehmen an:
@@ -271,6 +283,7 @@ function focusOnMap(l) {
 async function init() {
   state.pipeline = load("pipeline", {});
   initEigene();
+  initMail();
   try {
     state.meta = await getJson("data/meta.json");
   } catch (err) {
@@ -302,7 +315,7 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
@@ -495,6 +508,9 @@ function filtered(rows) {
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
     (state.tab !== "pipeline" || !status || l.status === status) &&
     (!$("#only-near").checked || l.near_count > 0) &&
+    (!$("#size-filter").value || l.size_rank >= ($("#size-filter").value === "L" ? 3 : 2)) &&
+    (!$("#only-green").checked || l.ampel === "g") &&
+    (!$("#hiring").checked || l.ws?.jobs || l.ws?.kar) &&
     sfcMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
@@ -532,7 +548,7 @@ function render() {
   }
 
   const cols = [
-    ["score", "Score"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
+    ["score", "Score"], ["ampel_pts", "Ampel"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
     [null, "Kontakt"], ["near_count", "Ströer im Umkreis"], ["status", "Status"], [null, "Notiz"], [null, ""],
   ];
   const head = cols.map(([k, label]) =>
@@ -544,7 +560,7 @@ function render() {
 
   document.querySelectorAll("th[data-sort]").forEach((th) => (th.onclick = () => {
     const k = th.dataset.sort;
-    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "score" || k === "near_count" ? -1 : 1) };
+    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (["score", "near_count", "ampel_pts"].includes(k) ? -1 : 1) };
     render();
   }));
   $("#more")?.addEventListener("click", () => { state.limit += 200; render(); });
@@ -557,6 +573,7 @@ function render() {
   }));
   document.querySelectorAll("button[data-del]").forEach((b) => (b.onclick = () => deleteOwn(b.dataset.del)));
   document.querySelectorAll("button[data-pitch]").forEach((b) => (b.onclick = () => openPitch(byId[b.dataset.pitch])));
+  document.querySelectorAll("[data-mail]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); openMail(byId[b.dataset.mail]); }));
   document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
   document.querySelectorAll("textarea[data-id]").forEach((t) => (t.onchange = () => save(byId[t.dataset.id], { notes: t.value })));
@@ -576,6 +593,7 @@ function rowHtml(l) {
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
     l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
     l.chain ? `<span class="badge chain">Kette${l.brand ? ": " + esc(l.brand) : ""}</span>` : "",
+    l.verbund ? `<span class="badge pt" title="Marke eines Händlerverbunds – die Märkte werden oft von selbstständigen Kaufleuten geführt, die selbst über Werbung entscheiden">Verbund: oft selbstständig</span>` : "",
     l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
     l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
     sfcBadge(l),
@@ -583,7 +601,7 @@ function rowHtml(l) {
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
     l.phone ? `<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ""))}">☎ ${esc(fmtPhone(l.phone))}</a>` : "",
-    l.email ? `<a href="mailto:${esc(l.email)}">✉ ${esc(l.email)}</a>` : "",
+    l.email ? `<a href="mailto:${esc(l.email)}" data-mail="${esc(l.id)}" title="Mail mit Vorlage in Outlook verfassen">✉ ${esc(l.email)}</a>` : "",
     site ? `<a href="${esc(site)}" target="_blank" rel="noopener">🌐 ${esc(l.website.replace(/^https?:\/\/(www\.)?/, ""))}</a>` : "",
   ].join("") || `<span class="sub">–</span>`;
   const statusOpts = STATUSES.map((s) => `<option value="${s}" ${l.status === s ? "selected" : ""}>${STATUS_LABELS[s]}</option>`).join("");
@@ -592,6 +610,7 @@ function rowHtml(l) {
   const osm = osmId.startsWith("osm:") ? `https://www.openstreetmap.org/${osmId.slice(4)}` : "";
   return `<tr>
     <td><span class="score ${scoreCls}" title="${esc(l.score_reasons.join("\n"))}">${l.score}</span></td>
+    <td>${ampelHtml(l)}</td>
     <td class="name">${l.photo ? `<img class="thumb" src="${l.photo}" alt="">` : ""}${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
     <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
@@ -603,19 +622,22 @@ function rowHtml(l) {
     <td><textarea data-id="${esc(l.id)}" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
     <td class="contact">
       <button class="pitch-btn" data-pitch="${esc(l.id)}" title="Individuellen Telefonpitch mit Claude erstellen">Pitch</button>
+      <button class="pitch-btn mail-btn" data-mail="${esc(l.id)}" title="Mail mit Vorlage in Outlook verfassen">Mail</button>
       <a href="${google}" target="_blank" rel="noopener">Google</a>
       ${osm ? `<a href="${osm}" target="_blank" rel="noopener">Karte</a>` : ""}
       ${l.source_link ? `<a href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}
+      ${lookupLinks(l)}
       ${state.tab === "eigene" ? `<button class="del-btn" data-del="${esc(l.id)}" title="Eigenen Lead löschen">Löschen</button>` : ""}
     </td>
   </tr>`;
 }
 
 function save(lead, patch) {
-  const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, ...raw } = lead;
+  const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, verbund,
+    size, size_rank, size_why, ampel: _a, ampel_pts, ampel_why, ...raw } = lead;
   const entry = state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
   Object.assign(entry, patch, { updated: new Date().toISOString() });
-  if (entry.status === "neu" && !entry.notes) delete state.pipeline[lead.id];
+  if (entry.status === "neu" && !entry.notes && !entry.contact) delete state.pipeline[lead.id];
   else state.pipeline[lead.id] = entry;
   store("pipeline", state.pipeline);
   if (state.tab === "pipeline" || state.tab === "eigene") render();
@@ -736,6 +758,8 @@ function exportCsv() {
     ["Nächste Ströer-Fläche (m)", (l) => l.near?.nearest?.dist ?? ""],
     ["Nächste Ströer-Fläche", (l) => l.near?.nearest ? `${mediaName(l.near.nearest.typ)}: ${l.near.nearest.standort} (SDAW ${l.near.nearest.id})` : ""],
     ["Träger", "pt"], ["Unsicher", (l) => (l.u ? "ja" : "")],
+    ["Größe (geschätzt)", "size"], ["Ampel", (l) => AMPEL_LABEL[l.ampel]], ["Signale", (l) => signalText(l)],
+    ["Rechtsform", (l) => l.ws?.rf || l.rf || ""], ["Offene Stellen", (l) => l.ws?.jobs || ""],
     ["Quelle", (l) => l.source_link || (l.photo ? "Eigenes Foto " + fmtDate(l.created) : "") ||
       (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : l.id.startsWith("ov:") ? "Overture Maps" : "")],
   ];
