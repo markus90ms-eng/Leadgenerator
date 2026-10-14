@@ -132,3 +132,14 @@ tr.near-detail td { background: #f7f9fc; padding: 0; }
 img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border-radius: 6px; margin-bottom: 4px; }
 .badge.foto { background: #e8f3f1; color: #0f6b5c; }
 .del-btn { display: block; margin-top: 4px; padding: 3px 8px; font-size: 12px; color: var(--bad); }
+
+/* Branchenbaum */
+.cat-tree { max-height: 420px; }
+.cat-group { border-bottom: 1px solid var(--line); padding: 2px 0; }
+.cat-group:last-child { border-bottom: 0; }
+.cat-head { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
+.cat-head a { flex: 1; text-decoration: none; color: var(--text); font-weight: 600; }
+.cat-head a:hover { color: var(--accent); }
+.cat-subs { padding-left: 22px; }
+.cat-subs label { font-size: 13px; }
+.badge.pt { background: #eef3ea; color: #3d6b1f; }

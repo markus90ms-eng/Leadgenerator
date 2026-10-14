@@ -12,10 +12,10 @@
 <header>
   <h1>Leadgenerator <span>Baden-Württemberg</span></h1>
   <nav id="tabs">
+    <button data-tab="eigene">Eigene Leads</button>
     <button data-tab="search" class="active">Firmensuche</button>
     <button data-tab="new">Neugründungen</button>
     <button data-tab="news">News-Radar</button>
-    <button data-tab="eigene">Eigene Leads</button>
     <button data-tab="pipeline">Meine Pipeline</button>
   </nav>
 </header>
@@ -43,7 +43,7 @@
         <label>Branchen</label>
         <span class="links"><a href="#" id="cats-all">alle</a> · <a href="#" id="cats-none">keine</a></span>
       </div>
-      <div id="cats" class="checklist"></div>
+      <div id="cats" class="checklist cat-tree"></div>
     </section>
 
     <section class="only-new">
@@ -65,6 +65,7 @@
       <label>Filter</label>
       <label class="check only-search only-new"><input type="checkbox" id="hide-chains" checked> Ketten/Filialen ausblenden</label>
       <label class="check only-search only-new"><input type="checkbox" id="need-contact"> nur mit Telefon/E-Mail/Website</label>
+      <label class="check only-search only-new" title="Zusätzliche Betriebe aus Overture Maps mit geringer Sicherheit (z. B. veraltet oder ungenau)"><input type="checkbox" id="show-unsure"> auch unsichere Einträge zeigen</label>
       <label for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
       <input type="search" id="text" placeholder="Name, Ort, Straße …">
@@ -104,7 +105,7 @@
       </div>
     </section>
 
-    <p class="hint">Daten: OpenStreetMap (Firmen), Google News (Meldungen) und Ströer-Standortkarte (Werbeträger). Jeden Morgen automatisch aktualisiert.</p>
+    <p class="hint">Daten: © OpenStreetMap-Mitwirkende (ODbL) und Overture Maps Foundation (CDLA-Permissive-2.0) für Firmen, Google News (Meldungen) und Ströer-Standortkarte (Werbeträger). Jeden Morgen automatisch aktualisiert.</p>
   </aside>
 
   <main>

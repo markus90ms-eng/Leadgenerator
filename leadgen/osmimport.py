@@ -12,7 +12,7 @@ from .regions import KREISE
 
 GEOFABRIK_URL = "https://download.geofabrik.de/europe/germany/baden-wuerttemberg-latest.osm.pbf"
 
-POI_KEYS = sorted({key for cat in CATEGORIES.values() for key, _ in cat["filters"]})
+POI_KEYS = sorted({f[0] for cat in CATEGORIES.values() for f in cat["filters"]})
 
 
 def download(path, url=GEOFABRIK_URL):

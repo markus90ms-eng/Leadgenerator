@@ -2,7 +2,7 @@
 
 Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-Württemberg**.
 
-- **Firmensuche** – alle 44 Stadt- und Landkreise, 17 Branchen (Autohäuser, Gastronomie, Fitness, Möbel, Handwerk …)
+- **Firmensuche** – alle 44 Stadt- und Landkreise, rund 95 Unterbranchen in 19 Hauptbranchen (z. B. Bau & Handwerk → Bad, Sanitär & Heizung), aufklappbar und mit Anzahl je Kreis. Quellen: OpenStreetMap und Overture Maps (u. a. Handwerksbetriebe ohne Ladengeschäft), Dubletten werden zusammengeführt; unsichere Einträge lassen sich zuschalten.
 - **Neugründungen** – findet automatisch Betriebe, die neu eröffnet haben oder neu eingetragen wurden
 - **News-Radar** – aktuelle Meldungen zu Neueröffnungen, Gründungen, Start-ups und neuen Standorten je Kreis
 - **Werbepotenzial-Score** (0–100) – priorisiert nach Branche, Neueröffnung und Erreichbarkeit; Ketten werden abgewertet (Marketing läuft dort zentral)
@@ -17,7 +17,7 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 
 **https://markus90ms-eng.github.io/Leadgenerator/**
 
-Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
+Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) und dem offenen Overture-Maps-Datensatz „places“ (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
 
 Status und Notizen der Pipeline werden im Browser gespeichert; über *Meine Pipeline → Sicherung speichern* lassen sie sich als Datei sichern.
 
@@ -60,7 +60,7 @@ Hinweis: Handelsregister-Neueintragungen und Gewerbeanmeldungen sind nicht frei 
 
 ## Datenschutz & Recht
 
-Alle Leads, Status und Notizen liegen nur lokal in `leads.db`. Genutzt werden ausschließlich öffentliche Firmendaten (OpenStreetMap, © OpenStreetMap-Mitwirkende, ODbL). Bei der Kaltakquise die UWG-Regeln beachten (B2B-Anrufe nur bei mutmaßlicher Einwilligung, keine Werbe-E-Mails ohne Einwilligung).
+Alle Leads, Status und Notizen liegen nur lokal in `leads.db` bzw. im Browser. Genutzt werden ausschließlich offen lizenzierte Firmendaten: © OpenStreetMap-Mitwirkende (ODbL) und Overture Maps Foundation (CDLA-Permissive-2.0). Bei der Kaltakquise die UWG-Regeln beachten (B2B-Anrufe nur bei mutmaßlicher Einwilligung, keine Werbe-E-Mails ohne Einwilligung).
 
 ## Tests
 

@@ -27,7 +27,12 @@ const STATUS_LABELS = {
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
-const catName = (id) => state.meta.categories.find((c) => c.id === id)?.name || id || "–";
+// Namen der alten Branchen-Einteilung (für ältere Einträge in Pipeline/Sicherungen)
+const OLD_CATS = { gastro: "Gastronomie", einzelhandel: "Einzelhandel", lebensmittel: "Lebensmittel & Getränke",
+  beauty: "Beauty & Wellness", immobilien: "Immobilien", baumarkt: "Bau, Garten & Heimwerk", freizeit: "Freizeit & Entertainment",
+  bildung: "Bildung", finanzen: "Banken & Versicherungen", dienstleister: "Firmen, Agenturen & IT",
+  gesundheit: "Gesundheit", recht: "Rechts- & Steuerberatung" };
+const catName = (id) => state.meta.categories.find((c) => c.id === id)?.name || OLD_CATS[id] || id || "–";
 const kreisName = (ags) => state.meta.kreise.find((k) => k.ags === ags)?.name || ags || "";
 const fmtDate = (iso) => (iso ? iso.split("-").reverse().join(".") : "");
 
@@ -69,6 +74,8 @@ function score(l, reason, near) {
   if (l.hours) parts.push([5, "Aktiv (Öffnungszeiten)"]);
   if (near?.count) parts.push([10, "Ströer-Fläche im Umkreis"]);
   if (l.chain) parts.push([-25, "Kette/Filiale (zentrales Marketing)"]);
+  if (l.pt === "privat") parts.push([10, "Privater Träger"]);
+  if (l.pt === "öffentlich") parts.push([-5, "Öffentlicher Träger"]);
   const total = Math.max(0, Math.min(100, parts.reduce((s, [p]) => s + p, 0)));
   return [total, parts.map(([p, why]) => `${why} ${p > 0 ? "+" : ""}${p}`)];
 }
@@ -201,7 +208,7 @@ function pitchPrompt(l) {
     : `keine Ströer-Fläche im Umkreis von ${$("#radius").selectedOptions[0].text}`;
   const facts = [
     `Firma: ${l.name}`,
-    `Branche: ${catName(l.category)}${l.kind ? ` (${l.kind})` : ""}`,
+    `Branche: ${catName(l.category)}${l.kind && l.kind !== catName(l.category) ? ` (${l.kind})` : ""}`,
     l.address ? `Adresse: ${l.address}` : `Ort: ${stadt}`,
     `Website: ${l.website || "keine bekannt – bitte im Web nach der Firma suchen"}`,
     l.phone ? `Telefon: ${l.phone}` : "",
@@ -282,9 +289,7 @@ async function init() {
   }
   kreisSel.value = load("kreis", "08111");
 
-  const savedCats = load("cats", state.meta.categories.filter((c) => c.weight >= 28).map((c) => c.id));
-  $("#cats").innerHTML = state.meta.categories.map((c) =>
-    `<label><input type="checkbox" value="${c.id}" ${savedCats.includes(c.id) ? "checked" : ""}> ${esc(c.name)}</label>`).join("");
+  renderCats(true);
   $("#topics").innerHTML = Object.values(state.meta.topics).map((name) =>
     `<label><input type="checkbox" value="${esc(name)}" checked> ${esc(name)}</label>`).join("");
   for (const s of STATUSES) $("#status-filter").append(new Option(STATUS_LABELS[s], s));
@@ -297,10 +302,27 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#cats"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
-  $("#cats").addEventListener("change", () => store("cats", selectedCats()));
+  $("#cats").addEventListener("change", catsChanged);
+  $("#cats").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-toggle]");
+    if (!t) return;
+    e.preventDefault();
+    const open = new Set(load("openGroups", []));
+    open.has(t.dataset.toggle) ? open.delete(t.dataset.toggle) : open.add(t.dataset.toggle);
+    store("openGroups", [...open]);
+    renderCats();
+  });
+  $("#show-unsure").checked = load("showUnsure", false);
+  $("#show-unsure").onchange = async () => {
+    store("showUnsure", $("#show-unsure").checked);
+    state.limit = 200;
+    if ($("#show-unsure").checked) await loadUnsure($("#kreis").value);
+    renderCats();
+    render();
+  };
   kreisSel.onchange = () => { store("kreis", kreisSel.value); state.focus = null; loadKreis(); };
   $("#radius").value = load("radius", "500");
   $("#radius").onchange = () => { store("radius", $("#radius").value); render(); };
@@ -314,16 +336,75 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["search", "new", "news", "pipeline", "eigene"].includes(startTab) ? startTab : "search");
+  switchTab(["eigene", "search", "new", "news", "pipeline"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
 function setAllCats(on) {
-  document.querySelectorAll("#cats input").forEach((i) => (i.checked = on));
+  document.querySelectorAll("#cats input[value]").forEach((i) => (i.checked = on));
+  catsChanged();
+}
+const selectedCats = () => [...document.querySelectorAll("#cats input[value]:checked")].map((i) => i.value);
+
+// Branchenbaum: Hauptbranche (aufklappbar) -> Unterbranchen, jeweils mit Anzahl im Kreis
+function defaultCats() {
+  return state.meta.categories.filter((c) => c.weight >= 26).map((c) => c.id);
+}
+function renderCats(initial = false) {
+  const valid = new Set(state.meta.categories.map((c) => c.id));
+  let chosen = initial ? load("cats", null) : selectedCats();
+  if (!chosen || chosen.some((id) => !valid.has(id))) chosen = defaultCats(); // alte Branchen-Einteilung
+  chosen = new Set(chosen);
+  const counts = {};
+  const data = state.kreisData[$("#kreis").value];
+  for (const l of [...(data?.leads || []), ...(showUnsure() ? data?.unsure || [] : [])]) counts[l.category] = (counts[l.category] || 0) + 1;
+  const open = new Set(load("openGroups", []));
+  const groups = state.meta.groups || [{ id: "", name: "Alle Branchen" }];
+  $("#cats").innerHTML = groups.map((g) => {
+    const cats = state.meta.categories.filter((c) => (c.group || "") === g.id);
+    const total = cats.reduce((n, c) => n + (counts[c.id] || 0), 0);
+    const on = cats.filter((c) => chosen.has(c.id)).length;
+    return `<div class="cat-group">
+      <div class="cat-head">
+        <input type="checkbox" data-group="${g.id}" ${on === cats.length ? "checked" : ""} ${on && on < cats.length ? 'data-mixed="1"' : ""} aria-label="${esc(g.name)}">
+        <a href="#" data-toggle="${g.id}" aria-expanded="${open.has(g.id)}">${open.has(g.id) ? "▾" : "▸"} ${esc(g.name)}</a>
+        <span class="count">${data ? total : ""}</span>
+      </div>
+      <div class="cat-subs" ${open.has(g.id) ? "" : "hidden"}>${cats.map((c) =>
+        `<label><input type="checkbox" value="${c.id}" ${chosen.has(c.id) ? "checked" : ""}> ${esc(c.name)}
+          <span class="count">${data ? counts[c.id] || 0 : ""}</span></label>`).join("")}</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#cats [data-mixed]").forEach((i) => (i.indeterminate = true));
+  if (initial) store("cats", [...chosen]);
+}
+function catsChanged(e) {
+  const g = e?.target?.dataset?.group;
+  if (g !== undefined) {
+    const ids = new Set(state.meta.categories.filter((c) => (c.group || "") === g).map((c) => c.id));
+    document.querySelectorAll("#cats input[value]").forEach((i) => { if (ids.has(i.value)) i.checked = e.target.checked; });
+  }
   store("cats", selectedCats());
+  renderCats();
+  state.limit = 200;
   render();
 }
-const selectedCats = () => [...document.querySelectorAll("#cats input:checked")].map((i) => i.value);
+const showUnsure = () => $("#show-unsure")?.checked;
+
+async function loadUnsure(ags) {
+  const data = state.kreisData[ags];
+  if (!data || data.unsure) return;
+  message(`Lade unsichere Einträge für ${kreisName(ags)} …`, true);
+  try {
+    const extra = await getJson(`data/kreis/${ags}-unsicher.json`);
+    for (const l of extra.leads) l.kreis = ags;
+    data.unsure = extra.leads;
+    message("");
+  } catch (_) {
+    data.unsure = [];
+    message("");
+  }
+}
 const selectedTopics = () => [...document.querySelectorAll("#topics input:checked")].map((i) => i.value);
 
 function switchTab(tab) {
@@ -345,8 +426,12 @@ function switchTab(tab) {
 async function loadKreis() {
   const ags = $("#kreis").value;
   const info = state.meta.status?.[ags];
-  $("#stand").textContent = info?.updated ? `Datenstand: ${fmtDate(info.updated)} · ${info.count} Betriebe` : "";
-  if (state.kreisData[ags]) { renderMediaFilter(); return render(); }
+  $("#stand").textContent = info?.updated ? `Datenstand: ${fmtDate(info.updated)} · ${info.count} Betriebe`
+    + (info.unsure ? ` (+ ${info.unsure} unsichere)` : "") : "";
+  if (state.kreisData[ags]) {
+    if (showUnsure()) await loadUnsure(ags);
+    renderMediaFilter(); renderCats(); return render();
+  }
   if (!info?.count) {
     $("#results").innerHTML = "";
     $("#summary").textContent = "";
@@ -365,10 +450,11 @@ async function loadKreis() {
     state.stroeerData[ags] = stroeerFeed;
     state.nearIndex = null;
     message("");
+    if (showUnsure()) await loadUnsure(ags);
   } catch (err) {
     message(err.message);
   }
-  if ($("#kreis").value === ags) { renderMediaFilter(); render(); }
+  if ($("#kreis").value === ags) { renderMediaFilter(); renderCats(); render(); }
 }
 
 function message(text, loading = false) {
@@ -389,7 +475,7 @@ function currentRows() {
   const since = monthsAgo(state.tab === "new" ? +$("#months").value : 12);
   const cats = new Set(selectedCats());
   const rows = [];
-  for (const l of data.leads) {
+  for (const l of showUnsure() ? [...data.leads, ...(data.unsure || [])] : data.leads) {
     if (!cats.has(l.category)) continue;
     if (state.tab === "new" && !newReason(l, since)) continue;
     rows.push(enrich(l, since));
@@ -473,16 +559,25 @@ function render() {
   updateMap(rows);
 }
 
+// "07031720996" -> "07031 720996" (Vorwahlen auf 1 wie 0711/0621 sind kürzer)
+function fmtPhone(p) {
+  if (!/^0\d{6,}$/.test(p)) return p;
+  const n = /^0[1-9]\d1/.test(p) && !/^01[5-7]/.test(p) ? 4 : /^01[5-7]/.test(p) ? 4 : 5;
+  return p.slice(0, n) + " " + p.slice(n);
+}
+
 function rowHtml(l) {
   const scoreCls = l.score >= 60 ? "high" : l.score < 35 ? "low" : "";
   const badges = [
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
     l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
     l.chain ? `<span class="badge chain">Kette${l.brand ? ": " + esc(l.brand) : ""}</span>` : "",
+    l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
+    l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
-    l.phone ? `<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ""))}">☎ ${esc(l.phone)}</a>` : "",
+    l.phone ? `<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ""))}">☎ ${esc(fmtPhone(l.phone))}</a>` : "",
     l.email ? `<a href="mailto:${esc(l.email)}">✉ ${esc(l.email)}</a>` : "",
     site ? `<a href="${esc(site)}" target="_blank" rel="noopener">🌐 ${esc(l.website.replace(/^https?:\/\/(www\.)?/, ""))}</a>` : "",
   ].join("") || `<span class="sub">–</span>`;
@@ -634,8 +729,9 @@ function exportCsv() {
     ["Ströer-Flächen im Umkreis", (l) => l.near?.count ?? ""],
     ["Nächste Ströer-Fläche (m)", (l) => l.near?.nearest?.dist ?? ""],
     ["Nächste Ströer-Fläche", (l) => l.near?.nearest ? `${mediaName(l.near.nearest.typ)}: ${l.near.nearest.standort} (SDAW ${l.near.nearest.id})` : ""],
+    ["Träger", "pt"], ["Unsicher", (l) => (l.u ? "ja" : "")],
     ["Quelle", (l) => l.source_link || (l.photo ? "Eigenes Foto " + fmtDate(l.created) : "") ||
-      (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : "")],
+      (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : l.id.startsWith("ov:") ? "Overture Maps" : "")],
   ];
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [fields.map(([h]) => cell(h)).join(";")].concat(
