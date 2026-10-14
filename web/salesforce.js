@@ -3,7 +3,7 @@
 // Die Kundendaten werden nur im Speicher dieser Seite gehalten, nie gespeichert oder hochgeladen.
 
 const SF_API = "http://127.0.0.1:8766";
-const sf = { rows: [], source: "", updated: "", hasBookings: false, running: false, online: null, loggedIn: false, error: "", log: [], limit: 300, sort: { key: "score", dir: -1 } };
+const sf = { state: "", message: "", rows: [], source: "", updated: "", hasBookings: false, running: false, online: null, loggedIn: false, error: "", log: [], limit: 300, sort: { key: "score", dir: -1 } };
 
 async function sfCall(path, method = "GET") {
   const r = await fetch(SF_API + path, { method, cache: "no-store" });
@@ -24,6 +24,8 @@ async function sfRefresh() {
     sf.loggedIn = s.logged_in;
     sf.running = s.state === "running";
     sf.log = s.log || [];
+    sf.state = s.state;
+    sf.message = s.message || "";
     sf.error = s.state === "error" ? s.message : "";
     $("#sf-login").hidden = !(sf.online && (!s.logged_in || s.state === "need_login"));
     $("#sf-run").disabled = sf.running;
@@ -51,8 +53,11 @@ async function sfStart(path) {
   try {
     await sfCall(path, "POST");
     sf.running = true;
+    sf.state = "running";
+    sf.log = [];
     $("#sf-run").disabled = true;
     sfInfo("Gestartet …");
+    render();
     setTimeout(sfRefresh, 800);
   } catch (e) {
     sf.online = false;
@@ -116,7 +121,7 @@ function sfFiltered() {
     (!owner || r.betreuer === owner) && (!br || r.branche === br) && r.score >= minScore);
 }
 
-function renderSalesforce() {
+function renderSalesforceInner() {
   const msg = $("#status-msg");
   const results = $("#results");
   if (sf.online === null) sfRefresh();
@@ -192,4 +197,27 @@ function exportSalesforce() {
   if (!rows.length) return message("Keine Daten zum Exportieren.");
   const lines = rows.map((r) => cols.map(([, k]) => esc2(r[k])).join(";"));
   download(`salesforce_${new Date().toISOString().slice(0, 10)}.csv`, "\ufeff" + [cols.map(([h]) => esc2(h)).join(";"), ...lines].join("\r\n"), "text/csv;charset=utf-8");
+}
+
+
+// Hinweis oben im Hauptbereich (gut sichtbar), z. B. "bitte einloggen" oder Fehlermeldung
+function sfBanner() {
+  if (!sf.online || sf.running) return "";
+  if (sf.state === "need_login" || !sf.loggedIn) {
+    return `<div class="sf-empty sf-banner"><h3>Schritt 1: Bei Salesforce einloggen</h3>
+      <p>Es öffnet sich ein Browser-Fenster. Dort ganz normal bei Salesforce anmelden. Danach hier auf <b>Liste erstellen</b> klicken.</p>
+      <button class="primary" data-sflogin>Bei Salesforce einloggen</button></div>`;
+  }
+  if (sf.state === "error") {
+    return `<div class="sf-warn"><b>Fehler:</b> ${esc(sf.message)}<br>Schick diese Meldung weiter, dann lässt sich das beheben.</div>`;
+  }
+  if (sf.state === "done" && sf.message) return `<div class="sf-ok">${esc(sf.message)}</div>`;
+  return "";
+}
+
+function renderSalesforce() {
+  renderSalesforceInner();
+  const html = sfBanner();
+  if (html) $("#results").insertAdjacentHTML("afterbegin", html);
+  document.querySelectorAll("[data-sflogin]").forEach((b) => (b.onclick = () => sfStart("/login")));
 }

@@ -140,3 +140,5 @@ img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border
 .sf-warn, .warn { color: var(--warn); }
 .sf-warn { background: var(--warn-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
 .stand.warn { color: var(--warn); }
+.sf-ok { background: var(--good-soft); color: var(--good); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
+.sf-banner { margin-bottom: 12px; }
