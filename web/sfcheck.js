@@ -34,14 +34,14 @@ async function sfcCall(path, method = "GET", body) {
   }
 }
 
-function sfcBadge(l) {
+function sfcBadge(l, compact = false) {
   const r = sfc.results[l.id];
   if (!r) return "";
   const m = r.matches?.[0];
   const owner = m?.owner ? ` (${esc(m.owner)})` : "";
   const tip = esc(r.note || "");
   const link = m?.url ? ` <a href="${esc(m.url)}" target="_blank" rel="noopener">öffnen</a>` : "";
-  const act = m?.letzter_kontakt ? `<span class="badge chain" title="Jüngeres Datum aus Letzte Aktivität und Zuletzt geändert (${esc(m.kontakt_quelle || "")})">${m.tage_seit_kontakt > 90 ? "⏳ " : ""}letzter Kontakt ${fmtDate(m.letzter_kontakt)}</span>` : "";
+  const act = compact ? "" : m?.letzter_kontakt ? `<span class="badge chain" title="Jüngeres Datum aus Letzte Aktivität und Zuletzt geändert (${esc(m.kontakt_quelle || "")})">${m.tage_seit_kontakt > 90 ? "⏳ " : ""}letzter Kontakt ${fmtDate(m.letzter_kontakt)}</span>` : "";
   switch (r.status) {
     case "frei": return `<span class="badge new" title="${tip}">✓ Nicht in Salesforce</span>`;
     case "potenzial": return `<span class="badge new" title="${tip}">✓ Potenzial-Account, nicht gesperrt${owner}</span>${act}${link}`;
