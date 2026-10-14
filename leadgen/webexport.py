@@ -42,7 +42,7 @@ def compact(lead):
         out["u"] = 1  # unsicherer Eintrag (Overture, geringe Konfidenz)
     if lead.get("operator_type") or lead.get("pt"):
         out["pt"] = lead.get("operator_type") or lead.get("pt")
-    for key in ("rf", "st", "ws"):  # Rechtsform, Standorte, Website-Signale
+    for key in ("rf", "st", "ws", "grp", "go", "gn"):  # Rechtsform, Standorte, Website-Signale, Gruppe
         if lead.get(key):
             out[key] = lead[key]
     if lead.get("lat") is not None:
@@ -138,17 +138,118 @@ def own_domain(lead):
     return "" if not d or d in overture.PLATFORMS or d in WEBMAIL or "." not in d else d
 
 
+# Gemeinsame Webadresse, aber keine gemeinsame Firma: Plattformen, Paketshops,
+# Lotto-Annahmestellen und Händlerverbünde (dort entscheiden die Kaufleute selbst)
+GROUP_EXCLUDE = {"mobile.de", "ups.com", "dhl.de", "dpd.com", "dpd.de", "gls-pakete.de", "hermesworld.com",
+                 "myhermes.de", "deutschepost.de", "post.de", "arbeitsagentur.de", "lotto-bayern.de", "lotto-bw.de",
+                 "lotto.de", "tipico.de", "tipico.com", "edeka.de", "rewe.de", "nahkauf.de", "nahundgut.de",
+                 "marktkauf.de", "intersport.de", "sport2000.de", "expert.de", "euronics.de", "ep.de", "hagebau.de",
+                 "hagebaumarkt.de", "raiffeisen.com", "vedes.de", "google.com", "google.de", "jimdosite.com",
+                 "wixsite.com", "business.site", "site123.me", "webnode.page", "beepworld.de", "de.tl", "npage.de"}
+
+
+def group_key(lead):
+    """Gruppe = registrierbare Domain der Firmen-Website (element-i.de für alle Kinderhäuser)."""
+    d = own_domain(lead)
+    if not d:
+        return ""
+    key = ".".join(d.split(".")[-2:])
+    return "" if key in GROUP_EXCLUDE or key in overture.PLATFORMS else key
+
+
+def _fold(text):
+    text = text.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+    return re.sub(r"[^a-z0-9]+", " ", text)
+
+
+def name_fits_domain(name, key):
+    """Passt der Firmenname zur Webadresse? (element-i Kinderhaus X <-> element-i.de)"""
+    core = re.sub(r"[^a-z0-9]", "", _fold(key.rsplit(".", 1)[0]))
+    compact = re.sub(r"[^a-z0-9]", "", _fold(name))
+    if len(core) >= 3 and core in compact:
+        return True
+    return any(len(t) >= 4 and t in core for t in _fold(name).split())
+
+
+def group_name(key, names):
+    """Name der Gruppe (ohne Satzzeichen am Ende)."""
+    return re.sub(r"[\s\-–|,:;/]+$", "", _group_name(key, names))
+
+
+def _group_name(key, names):
+    """Gemeinsamer Namensanfang, sonst Firmierung passend zur Webadresse, sonst Domain."""
+    # Längster Namensanfang (1-3 Wörter), den mindestens 60 % der Standorte teilen
+    for k in (3, 2, 1):
+        prefixes = Counter(" ".join(n.split()[:k]) for n in names if len(n.split()) >= k)
+        if prefixes:
+            prefix, count = prefixes.most_common(1)[0]
+            if count >= 0.6 * len(names) and len(prefix) >= 4 and (count < len(names) or k < 3 or len(names) == 2):
+                return prefix
+    fitting = sorted((n for n in names if name_fits_domain(n, key)), key=len)
+    with_form = [n for n in fitting if webcheck.legal_form(n)]
+    if with_form:  # nur bis zur Rechtsform (danach steht oft ein Personenname)
+        m = re.match(r"^(.*?(?:GmbH\s*&\s*Co\.?\s*KG|gGmbH|GmbH|AG|KG|e\.\s?V\.|eG|UG|SE|OHG|e\.\s?K\.))", with_form[0])
+        return m.group(1) if m else with_form[0]
+    return fitting[0] if fitting and len(fitting[0]) <= 40 else key.rsplit(".", 1)[0]
+
+
+def build_groups(leads_by_kreis):
+    """Betriebe mit gleicher Firmen-Website zu Gruppen zusammenfassen (über alle Kreise).
+
+    Homepage-Baukästen, bei denen viele fremde Firmen dieselbe Adresse haben,
+    werden erkannt: Die Namen passen dann nicht zur Webadresse und es gibt
+    keine gemeinsame Telefonnummer."""
+    members = {}
+    for ags, leads in leads_by_kreis.items():
+        for lead in leads:
+            key = group_key(lead)
+            if key:
+                members.setdefault(key, []).append((ags, lead))
+    groups = {}
+    for key, ms in members.items():
+        if len(ms) < 2:
+            continue
+        phones = Counter(p for p in (norm_phone(l.get("phone") or "") for _, l in ms) if p)
+        top = phones.most_common(1)
+        shared_phone = bool(top and top[0][1] >= 2 and top[0][1] >= 0.3 * len(ms))
+        fits = sum(name_fits_domain(l["name"], key) for _, l in ms) / len(ms)
+        if fits < 0.3 and not shared_phone:
+            continue  # vermutlich Homepage-Baukasten, keine gemeinsame Firma
+        orte = {(l.get("city") or "").strip() or ags for ags, l in ms}
+        name = group_name(key, [l["name"] for _, l in ms])
+        groups[key] = {
+            "name": name, "n": len(ms), "orte": len(orte),
+            "zentrale": top[0][0] if shared_phone else "",
+            "kreise": dict(Counter(ags for ags, _ in ms)),
+            "members": [[l["id"], l["name"], l.get("city", ""), ags, l.get("phone", ""), l.get("address", ""),
+                         1 if (l.get("unsure") or l.get("u")) else 0] for ags, l in ms],
+        }
+        for _, lead in ms:
+            lead.update(grp=key, st=len(ms), go=len(orte), gn=name)
+    return groups
+
+
+def group_shard(key):
+    """Teildatei einer Gruppe – gleiche Rechnung wie groupShard() in web/signale.js."""
+    return "%x" % (sum(key.encode()) % 16)
+
+
+def write_groups(out, groups):
+    shards = {c: {} for c in "0123456789abcdef"}
+    for key, g in groups.items():
+        shards[group_shard(key)][key] = g
+    for c, part in shards.items():
+        write(out, f"data/gruppen/{c}.json", part)
+
+
 def add_signals(leads_by_kreis, cache):
-    """Rechtsform aus dem Namen, Anzahl Standorte je Website und Website-Signale ergänzen."""
-    count = Counter(own_domain(l) for leads in leads_by_kreis.values() for l in leads)
+    """Rechtsform aus dem Namen und Website-Signale ergänzen."""
     for leads in leads_by_kreis.values():
         for lead in leads:
             rf = webcheck.legal_form(lead.get("name"))
             if rf:
                 lead["rf"] = rf
             d = own_domain(lead)
-            if d and count[d] >= 2:
-                lead["st"] = count[d]
             sig = cache.get(d) if d else None
             if sig and not sig.get("err") and not sig.get("rb"):
                 ws = {k: v for k, v in sig.items() if k != "d"}
@@ -356,6 +457,9 @@ def main(argv=None):
                      log=lambda m: print(m, flush=True))
     write_webcheck_cache(args.out, cache)
     add_signals(merged, cache)
+    groups = build_groups(merged)
+    write_groups(args.out, groups)
+    print(f"Gruppen: {len(groups)} Gruppen mit gleicher Website, {sum(g['n'] for g in groups.values())} Betriebe", flush=True)
 
     # 3. Je Kreis schreiben
     status, updated, all_rows = {}, 0, []
@@ -396,6 +500,7 @@ def main(argv=None):
         "media": stroeer.MEDIA,
         "media_groups": stroeer.GROUPS,
         "status": status,
+        "gruppen": len(groups),
         "webcheck": {"sites": len(cache), "checked": sum(1 for v in cache.values() if not v.get("err") and not v.get("rb"))},
     })
     print(f"Fertig. {updated}/{len(KREISE)} Kreise aktualisiert.")

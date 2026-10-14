@@ -60,6 +60,11 @@ OVERTURE_ROWS = [
     ov_row("bbbbbbbb-0000-0000-0000-000000000002", "Bickel GmbH Bäder", "hvac_service",
            ["services_and_business", "home_service", "hvac_service"], 48.69, 9.02, phones=["04971 31570001"],
            websites=["https://bickelgmbh.de/"]),
+    ov_row("abababab-0000-0000-0000-000000000009", "Bickel Kundendienst", "plumbing",
+           ["services_and_business", "home_service", "plumbing"], 48.75, 9.05, phones=["07131 570001"],
+           websites=["http://www.bickelgmbh.de/service"]),
+    ov_row("acacacac-0000-0000-0000-000000000010", "Kinderhaus Spatzennest", "elementary_school",
+           ["education", "school", "elementary_school"], 48.72, 9.04, websites=["https://element-i.de/"]),
     ov_row("cccccccc-0000-0000-0000-000000000003", "Maler Klein", "painting",
            ["services_and_business", "home_service", "painting"], 48.71, 9.03, conf=0.5, phones=["070311111"]),
     ov_row("dddddddd-0000-0000-0000-000000000004", "Alter Laden", "clothing_store",
@@ -293,17 +298,23 @@ class WebExportTest(unittest.TestCase):
             self.assertEqual((bickel["category"], bickel["phone"], bickel["kind"]), ("sanitaer", "07131570001", "Heizung & Klima"))
             self.assertNotIn("first_seen", bickel)
             self.assertEqual(leads["Maler Klein"]["u"], 1)
+            self.assertEqual(leads["Kinderhaus Spatzennest"]["category"], "kita")  # nicht "Schule"
             self.assertFalse({"Alter Laden", "Geldautomat", "Draußen GmbH"} & set(leads))
             # Rechtsform aus dem Namen, Signale aus dem Website-Check
             self.assertEqual(bickel["rf"], "GmbH")
             self.assertEqual(bickel["ws"], {"rf": "GmbH", "hr": 1, "kap": 50000, "kar": 1, "jobs": 2, "shop": 1, "soc": 1})
             self.assertNotIn("ws", leads["Autohaus Müller"])  # robots.txt sperrt
+            # Gruppe: Bickel hat zwei Standorte mit gleicher Website
+            self.assertEqual((bickel["grp"], bickel["st"]), ("bickelgmbh.de", 2))
+            with open(os.path.join(out, "data/gruppen", webexport.group_shard("bickelgmbh.de") + ".json"), encoding="utf-8") as fh:
+                grp = json.load(fh)["bickelgmbh.de"]
+            self.assertEqual((grp["name"], grp["n"], grp["zentrale"]), ("Bickel", 2, "07131570001"))
             with open(os.path.join(out, "data/web", webcheck.shard_of("autohaus-mueller.de") + ".json"), encoding="utf-8") as fh:
                 self.assertEqual(json.load(fh)["sites"]["autohaus-mueller.de"]["rb"], 1)
             self.assertTrue(os.path.exists(os.path.join(out, "index.html")))
             with open(os.path.join(out, "data/meta.json"), encoding="utf-8") as fh:
                 status = json.load(fh)["status"]
-            self.assertEqual((status["08115"]["count"], status["08115"]["unsure"]), (4, 1))
+            self.assertEqual((status["08115"]["count"], status["08115"]["unsure"]), (6, 1))
             self.assertEqual(status["08115"]["osm"], 3)
             self.assertEqual(status["08111"]["count"], 0)
             self.assertEqual(status["08115"]["stroeer"], 1)  # einer innerhalb, einer außerhalb des Kreises

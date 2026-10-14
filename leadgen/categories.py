@@ -464,6 +464,16 @@ def classify_overture(primary, hierarchy=()):
     return None
 
 
+_KITA = re.compile(r"kinderh[aä]us|\bkita\b|kindertages|kindergarten|kinderkrippe|\bkrippe\b|kinderbetreuung", re.I)
+
+
+def fix_category(category, name):
+    """Kinderhäuser/Kitas, die eine Quelle als Schule führt, als Kita einordnen."""
+    if category in ("schule", "privatschule", "weiterbildung", "kursschule") and _KITA.search(name or ""):
+        return "kita"
+    return category
+
+
 def operator_type(tags):
     """öffentlich / privat / kirchlich – nur wo OSM es angibt."""
     value = (tags.get("operator:type") or "").lower()

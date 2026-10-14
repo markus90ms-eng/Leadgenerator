@@ -9,7 +9,7 @@ Ausschnitt Baden-Württemberg. Benötigt das Paket `pyarrow`.
 
 import re
 
-from .categories import classify_overture, overture_kind
+from .categories import classify_overture, fix_category, overture_kind
 
 BUCKET = "overturemaps-us-west-2"
 REGION = "us-west-2"
@@ -87,6 +87,7 @@ def place_to_lead(row):
     name = ((row.get("names") or {}).get("primary") or "").strip()
     if not category or not name:
         return None
+    category = fix_category(category, name)
     phone = next((p for p in map(norm_phone, row.get("phones") or []) if p), "")
     website = (row.get("websites") or [""])[0] or ""
     if confidence < SURE and not (phone or website):

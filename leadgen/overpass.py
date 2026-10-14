@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from .categories import CATEGORIES, classify, operator_type, osm_kind
+from .categories import CATEGORIES, classify, fix_category, operator_type, osm_kind
 from .regions import get_kreis
 
 ENDPOINTS = [
@@ -102,7 +102,7 @@ def element_to_lead(el, ags):
     return {
         "id": f"osm:{el['type']}/{el['id']}",
         "name": tags["name"],
-        "category": category,
+        "category": fix_category(category, tags["name"]),
         "kind": osm_kind(tags),
         "operator_type": operator_type(tags),
         "kreis": ags,

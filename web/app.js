@@ -85,11 +85,15 @@ function score(l, reason, near) {
 const VERBUND = /\b(edeka|e-?center|marktkauf|rewe|nahkauf|nah\s*(?:&|und)\s*gut|intersport|sport\s*2000|expert|euronics|ep:|electronicpartner|hagebau(?:markt)?|raiffeisen|vedes|spielwaren\s*(?:&|und)|budni|team\s*energie|kodi)\b/i;
 const isVerbund = (l) => VERBUND.test(`${l.brand || ""} ${l.name || ""}`);
 
+// Pipeline-Eintrag eines Betriebs – bei Gruppen gilt der Eintrag der ganzen Gruppe
+const pipeKey = (l) => (l.grp ? "grp:" + l.grp : l.id);
+const pipeEntry = (l) => (l.grp && state.pipeline["grp:" + l.grp]) || state.pipeline[l.id];
+
 function enrich(l, since) {
   // Verbund-Märkte: gemeinsame Website (z. B. edeka.de) sagt nichts über eigene Standorte
-  if (l.chain && isVerbund(l)) l = { ...l, chain: 0, verbund: 1, st: undefined };
+  if (l.chain && isVerbund(l)) l = { ...l, chain: 0, verbund: 1, st: undefined, grp: undefined };
   const reason = newReason(l, since);
-  const p = state.pipeline[l.id];
+  const p = pipeEntry(l);
   const kreis = l.kreis || p?.lead?.kreis;
   const near = nearby(l, kreis);
   const [s, reasons] = score(l, reason, near);
@@ -225,7 +229,8 @@ function pitchPrompt(l) {
     `Ströer-Flächen in der Nähe: ${flaechen}`,
     l.photo ? `Gesehen: eigene Beobachtung (Werbung auf Fahrzeug/Schild)${l.ocr ? ` – Text auf dem Foto: „${l.ocr.replace(/\s+/g, " ").slice(0, 300)}“` : ""}` : "",
     signalText(l) ? `Signale: ${signalText(l)}` : "",
-    state.pipeline[l.id]?.contact?.name ? `Ansprechpartner: ${state.pipeline[l.id].contact.anrede || ""} ${state.pipeline[l.id].contact.name}`.replace("  ", " ") : "",
+    pipeEntry(l)?.contact?.name ? `Ansprechpartner: ${pipeEntry(l).contact.anrede || ""} ${pipeEntry(l).contact.name}`.replace("  ", " ") : "",
+    l.grp ? `Gruppe: gehört zu „${l.gn || l.grp}“ mit ${l.st} Standorten in ${l.go} Orten (gleiche Website) – Werbung wird vermutlich zentral entschieden, der Pitch sollte die Gruppe ansprechen` : "",
     l.new_reason ? `Besonderheit: ${l.new_reason}${l.start_date ? " (" + fmtDate(l.start_date) + ")" : ""}` : "",
   ].filter(Boolean).join("\n");
   return `Du bist mein Vertriebsassistent. Ich bin Markus Schultheiß, Ströer AG, und rufe gleich bei folgendem Unternehmen an:
@@ -315,7 +320,7 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
@@ -515,10 +520,11 @@ function filtered(rows) {
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
   const { key, dir } = state.sort;
-  return out.sort((a, b) => {
+  out.sort((a, b) => {
     const x = a[key] ?? "", y = b[key] ?? "";
     return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "de")) * dir;
   });
+  return state.tab !== "pipeline" && $("#group-collapse")?.checked ? collapseGroups(out) : out;
 }
 
 function render() {
@@ -554,7 +560,8 @@ function render() {
   const head = cols.map(([k, label]) =>
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
   const body = rows.slice(0, state.limit).map((l) =>
-    rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")).join("");
+    rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")
+    + (l.grp && state.openGroup === l.id ? groupDetailHtml(l, cols.length) : "")).join("");
   $("#results").innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
     ${rows.length > state.limit ? `<div class="more"><button id="more">Weitere ${Math.min(200, rows.length - state.limit)} anzeigen</button></div>` : ""}</div>`;
 
@@ -573,6 +580,7 @@ function render() {
   }));
   document.querySelectorAll("button[data-del]").forEach((b) => (b.onclick = () => deleteOwn(b.dataset.del)));
   document.querySelectorAll("button[data-pitch]").forEach((b) => (b.onclick = () => openPitch(byId[b.dataset.pitch])));
+  document.querySelectorAll("button[data-grp]").forEach((b) => (b.onclick = () => toggleGroup(byId[b.dataset.grp])));
   document.querySelectorAll("[data-mail]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); openMail(byId[b.dataset.mail]); }));
   document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
@@ -597,6 +605,7 @@ function rowHtml(l) {
     l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
     l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
     sfcBadge(l),
+    groupBadge(l),
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
@@ -635,10 +644,12 @@ function rowHtml(l) {
 function save(lead, patch) {
   const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, verbund,
     size, size_rank, size_why, ampel: _a, ampel_pts, ampel_why, ...raw } = lead;
-  const entry = state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
+  const key = pipeKey(lead);
+  const entry = state.pipeline[key] || state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
+  if (key !== lead.id) delete state.pipeline[lead.id]; // älterer Einzel-Eintrag geht in der Gruppe auf
   Object.assign(entry, patch, { updated: new Date().toISOString() });
-  if (entry.status === "neu" && !entry.notes && !entry.contact) delete state.pipeline[lead.id];
-  else state.pipeline[lead.id] = entry;
+  if (entry.status === "neu" && !entry.notes && !entry.contact) delete state.pipeline[key];
+  else state.pipeline[key] = entry;
   store("pipeline", state.pipeline);
   if (state.tab === "pipeline" || state.tab === "eigene") render();
 }

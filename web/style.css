@@ -178,3 +178,10 @@ aside label.btn.sf-csv:hover { border-color: var(--accent); }
 .mail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .mail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .mail-actions .pitch-btn { display: inline-block; margin: 0; padding: 8px 16px; }
+
+/* Gruppen */
+.grp-btn { all: unset; cursor: pointer; display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; margin: 2px 4px 0 0; background: #e7ecfb; color: #2f4bb5; }
+.grp-btn::after { content: " ▸"; }
+.grp-btn.open::after { content: " ▾"; }
+.grp-btn:hover, .grp-btn:focus-visible { background: #d4ddf8; }
+.grp-list li { grid-template-columns: 130px 1fr auto; }

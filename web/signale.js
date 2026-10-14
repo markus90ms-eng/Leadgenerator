@@ -155,7 +155,7 @@ let mailLead = null;
 function openMail(l) {
   mailLead = l;
   const dlg = $("#mail-dialog");
-  const c = state.pipeline[l.id]?.contact || {};
+  const c = pipeEntry(l)?.contact || {};
   $("#mail-to").value = l.email || "";
   $("#mail-anrede").value = c.anrede || "";
   $("#mail-name").value = c.name || "";
@@ -208,4 +208,71 @@ function initMail() {
     setTimeout(() => ($("#mail-copy").textContent = "Text kopieren"), 1500);
   };
   $("#mail-cancel").onclick = (e) => { e.preventDefault(); $("#mail-dialog").close(); };
+}
+
+// ---------- Gruppen (gleiche Firmen-Website, über alle Kreise) -------------
+const groupShard = (key) => ([...new TextEncoder().encode(key)].reduce((a, b) => a + b, 0) % 16).toString(16);
+const groupFiles = {};
+const groupData = {};
+
+async function loadGroup(key) {
+  if (groupData[key]) return groupData[key];
+  const shard = groupShard(key);
+  groupFiles[shard] ||= getJson(`data/gruppen/${shard}.json`).catch(() => ({}));
+  groupData[key] = (await groupFiles[shard])[key] || null;
+  return groupData[key];
+}
+
+function groupBadge(l) {
+  if (!l.grp) return "";
+  const p = state.pipeline["grp:" + l.grp];
+  return `<button class="grp-btn${state.openGroup === l.id ? " open" : ""}" data-grp="${esc(l.id)}" title="Alle Standorte der Gruppe zeigen">`
+    + `Gruppe ${esc(l.gn || l.grp)} · ${l.st} Standorte${l.go > 1 ? ` in ${l.go} Orten` : ""}</button>`
+    + (l.grp_here > 1 ? `<span class="badge chain">${l.grp_here} davon in dieser Liste</span>` : "")
+    + (l.st >= 20 ? `<span class="badge chain" title="Viele Standorte – Werbung wird vermutlich zentral entschieden">zentral gesteuert</span>` : "")
+    + (p && state.tab !== "pipeline" && p.status !== "neu"
+      ? `<span class="badge fresh" title="Status gilt für alle Standorte der Gruppe">Gruppe: ${esc(STATUS_LABELS[p.status] || p.status)} ${fmtDate((p.updated || "").slice(0, 10))}</span>` : "");
+}
+
+async function toggleGroup(l) {
+  if (state.openGroup === l.id) { state.openGroup = null; return render(); }
+  state.openGroup = l.id;
+  await loadGroup(l.grp);
+  render();
+}
+
+function groupDetailHtml(l, colspan) {
+  const g = groupData[l.grp];
+  if (!g) return `<tr class="near-detail"><td colspan="${colspan}"><div class="near-box">Gruppe wird geladen …</div></td></tr>`;
+  const here = $("#kreis").value;
+  const members = [...g.members].sort((a, b) =>
+    (b[3] === here) - (a[3] === here) || kreisName(a[3]).localeCompare(kreisName(b[3]), "de") || a[2].localeCompare(b[2], "de"));
+  const kreise = Object.entries(g.kreise).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${kreisName(a)} (${n})`).join(", ");
+  const items = members.map(([id, name, city, ags, phone, address, unsure]) => `<li>
+      <span class="dist">${esc(city || "")}</span>
+      <span class="where"><b>${esc(name)}</b>${unsure ? ' <span class="sub">(unsicher)</span>' : ""}<span class="sub"> · ${esc(address || kreisName(ags))} · ${esc(kreisName(ags))}</span></span>
+      <span class="links">${phone ? `<a href="tel:${esc(phone)}">${phone === g.zentrale ? "★ " : ""}${esc(fmtPhone(phone))}</a>` : ""}</span>
+    </li>`).join("");
+  return `<tr class="near-detail"><td colspan="${colspan}"><div class="near-box">
+    <div class="near-head">
+      <b>Gruppe ${esc(g.name)}: ${g.n} Standorte in ${g.orte} Orten</b>
+      ${g.zentrale ? `<span>Vermutlich Zentrale: <a href="tel:${esc(g.zentrale)}">★ ${esc(fmtPhone(g.zentrale))}</a></span>` : ""}
+    </div>
+    <div class="sub">Kreise: ${esc(kreise)} · Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.</div>
+    <ul class="near-list grp-list">${items}</ul>
+  </div></td></tr>`;
+}
+
+// Eine Zeile pro Gruppe (die erste nach der aktuellen Sortierung)
+function collapseGroups(rows) {
+  const seen = new Map();
+  const out = [];
+  for (const l of rows) {
+    if (!l.grp) { out.push(l); continue; }
+    if (seen.has(l.grp)) { seen.get(l.grp).grp_here += 1; continue; }
+    const first = { ...l, grp_here: 1 };
+    seen.set(l.grp, first);
+    out.push(first);
+  }
+  return out;
 }
