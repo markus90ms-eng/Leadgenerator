@@ -142,3 +142,5 @@ img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border
 .stand.warn { color: var(--warn); }
 .sf-ok { background: var(--good-soft); color: var(--good); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
 .sf-banner { margin-bottom: 12px; }
+aside label.btn.sf-csv { font-weight: 600; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; margin: 8px 0 0; }
+aside label.btn.sf-csv:hover { border-color: var(--accent); }
