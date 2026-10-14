@@ -31,7 +31,7 @@ function sfcBadge(l) {
   const owner = m?.owner ? ` (${esc(m.owner)})` : "";
   const tip = esc(r.note || "");
   const link = m?.url ? ` <a href="${esc(m.url)}" target="_blank" rel="noopener">öffnen</a>` : "";
-  const act = m?.last_activity ? `<span class="badge chain" title="Letzte Aktivität im Account">${m.tage_ohne_aktivitaet > 90 ? "⏳ " : ""}letzte Aktivität ${fmtDate(m.last_activity)}</span>` : "";
+  const act = m?.letzter_kontakt ? `<span class="badge chain" title="Jüngeres Datum aus Letzte Aktivität und Zuletzt geändert (${esc(m.kontakt_quelle || "")})">${m.tage_seit_kontakt > 90 ? "⏳ " : ""}letzter Kontakt ${fmtDate(m.letzter_kontakt)}</span>` : "";
   switch (r.status) {
     case "frei": return `<span class="badge new" title="${tip}">✓ Nicht in Salesforce</span>`;
     case "potenzial": return `<span class="badge new" title="${tip}">✓ Potenzial-Account, nicht gesperrt${owner}</span>${act}${link}`;
@@ -48,7 +48,9 @@ function sfcMatches(l) {
   if (!f) return true;
   const r = sfc.results[l.id];
   if (f === "ungeprueft") return !r;
-  if (f === "inaktiv3m") return !!r && (r.matches?.[0]?.tage_ohne_aktivitaet ?? -1) > 90;
+  const days = { inaktiv3m: 90, inaktiv6m: 180, inaktiv12m: 365 }[f];
+  if (days) return !!r && (r.matches?.[0]?.tage_seit_kontakt ?? -1) > days;
+  if (f === "kontakt_unbekannt") return !!r && r.status !== "frei" && r.status !== "fehler" && r.matches?.[0]?.tage_seit_kontakt == null;
   return !!r && r.status === f;
 }
 

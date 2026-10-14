@@ -82,7 +82,7 @@ async function sfStart(path) {
 }
 
 // Klicks und Filter über das ganze Dokument abfangen: funktioniert unabhängig von der Lade-Reihenfolge der Skripte.
-const SF_VERSION = "10";
+const SF_VERSION = "11";
 try { const saved = localStorage.getItem("sf-liste"); if (saved) window.addEventListener("load", () => { $("#sf-liste").value = saved; }); } catch (_) {}
 document.addEventListener("click", (e) => {
   if (e.target.closest("#sf-run")) {
