@@ -42,7 +42,7 @@
       <label class="btn sf-csv" for="sf-csv" style="display:block;text-align:center">CSV importieren</label>
       <input type="file" id="sf-csv" accept=".csv,text/csv" hidden>
       <div class="stand" id="sf-info"></div>
-      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 7</span></p>
+      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 8</span></p>
     </section>
 
     <section class="only-salesforce" id="sf-filters">
@@ -119,6 +119,15 @@
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
       <input type="search" id="text" placeholder="Name, Ort, Straße …">
       <select id="status-filter" class="only-pipeline"><option value="">Alle Status</option></select>
+      <label for="sfc-filter">Salesforce-Abgleich</label>
+      <select id="sfc-filter">
+        <option value="">alle</option>
+        <option value="frei">nur frei (nicht in Salesforce)</option>
+        <option value="ruhend">Account, lange nicht betreut</option>
+        <option value="vergeben">Account, aktiv vergeben</option>
+        <option value="unklar">Account, Details unklar</option>
+        <option value="ungeprueft">noch nicht geprüft</option>
+      </select>
     </section>
 
     <section class="only-search only-new only-pipeline only-eigene">
@@ -161,6 +170,7 @@
     <div class="toolbar">
       <div id="summary">Lade Daten …</div>
       <div class="actions">
+        <button id="sfc-run" title="Prüft die angezeigten Betriebe in Salesforce: schon Account? Inhaber? Frei?">Mit Salesforce abgleichen</button>
         <button id="toggle-map">Karte</button>
         <button id="export">CSV-Export</button>
       </div>
@@ -175,6 +185,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="eigene.js"></script>
 <script src="salesforce.js"></script>
+<script src="sfcheck.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

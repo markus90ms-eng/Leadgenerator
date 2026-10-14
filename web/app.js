@@ -337,6 +337,7 @@ function switchTab(tab) {
   });
   $("#export").hidden = tab === "news";
   $("#toggle-map").hidden = tab === "news" || tab === "salesforce";
+  $("#sfc-run").hidden = tab === "news" || tab === "salesforce";
   if (tab === "salesforce") $("#map").hidden = true;
   renderQueue();
   render();
@@ -408,6 +409,7 @@ function filtered(rows) {
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
     (state.tab !== "pipeline" || !status || l.status === status) &&
     (!$("#only-near").checked || l.near_count > 0) &&
+    sfcMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
   const { key, dir } = state.sort;
@@ -481,6 +483,7 @@ function rowHtml(l) {
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
     l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
     l.chain ? `<span class="badge chain">Kette${l.brand ? ": " + esc(l.brand) : ""}</span>` : "",
+    sfcBadge(l),
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
