@@ -3,7 +3,7 @@
 // Die Kundendaten werden nur im Speicher dieser Seite gehalten, nie gespeichert oder hochgeladen.
 
 const SF_API = "http://127.0.0.1:8766";
-const sf = { rows: [], source: "", updated: "", running: false, online: null, loggedIn: false, error: "", log: [] };
+const sf = { rows: [], source: "", updated: "", hasBookings: false, running: false, online: null, loggedIn: false, error: "", log: [], limit: 300, sort: { key: "score", dir: -1 } };
 
 async function sfCall(path, method = "GET") {
   const r = await fetch(SF_API + path, { method, cache: "no-store" });
@@ -33,7 +33,8 @@ async function sfRefresh() {
     else sfInfo(s.message || "");
     if (!sf.running && s.result_updated && s.result_updated !== sf.updated) {
       const res = await sfCall("/result");
-      Object.assign(sf, { rows: res.rows, source: res.source, updated: res.updated });
+      Object.assign(sf, { rows: res.rows.map(sfEnrich), source: res.source, updated: res.updated, hasBookings: !!res.has_bookings });
+      sfFillSelects();
     }
   } catch (_) {
     sf.online = false;
@@ -60,9 +61,60 @@ async function sfStart(path) {
   }
 }
 
-$("#sf-run").onclick = () => sfStart(`/run?days=${$("#sf-days").value}`);
+$("#sf-run").onclick = () => sfStart("/run");
 $("#sf-login").onclick = () => sfStart("/login");
-$("#sf-days").onchange = () => { sf.rows = []; sf.updated = ""; render(); };
+for (const id of ["#sf-text", "#sf-idle", "#sf-booked", "#sf-lastbook", "#sf-minrev", "#sf-owner", "#sf-branche", "#sf-minscore"]) {
+  $(id).addEventListener("input", () => { sf.limit = 300; $("#sf-minscore-val").textContent = $("#sf-minscore").value; render(); });
+}
+
+const sfMonthsAgo = (m) => { const d = new Date(); d.setMonth(d.getMonth() - m); return d.toISOString().slice(0, 10); };
+const sfDaysSince = (iso) => (iso && iso !== "nie" ? Math.floor((Date.now() - new Date(iso)) / 864e5) : null);
+const sfEur = (n) => (n ? Math.round(n).toLocaleString("de-DE") + " €" : "–");
+
+// Potenzial 0-100 mit nachvollziehbaren Gründen
+function sfEnrich(r) {
+  const why = [];
+  let score = 0;
+  const add = (pts, text) => { if (pts > 0) { score += pts; why.push(`+${pts} ${text}`); } };
+  if (r.gebucht_anzahl > 0) {
+    add(30, "schon gebucht (Ex-Kunde)");
+    add(Math.min(25, Math.round(Math.log10(r.gebucht_umsatz + 1) * 5)), `bisheriger Umsatz ${sfEur(r.gebucht_umsatz)}`);
+    const m = (Date.now() - new Date(r.letzte_buchung)) / (864e5 * 30.4);
+    if (r.letzte_buchung) add(m >= 6 && m <= 36 ? 15 : m > 36 ? 5 : 0, `letzte Buchung vor ${Math.round(m)} Monaten`);
+  }
+  const idle = sfDaysSince(r.letzte_aktivitaet);
+  if (idle === null) add(10, "noch nie Aktivität");
+  else if (idle >= 180) add(20, "seit über 6 Monaten keine Betreuung");
+  else if (idle >= 90) add(15, "seit über 3 Monaten keine Betreuung");
+  if ((r.mitarbeiter || 0) >= 50 || (r.jahresumsatz || 0) >= 1e7) add(10, "größeres Unternehmen");
+  return { ...r, score: Math.min(100, score), why };
+}
+
+function sfFillSelects() {
+  const fill = (sel, values) => {
+    const cur = $(sel).value;
+    $(sel).innerHTML = `<option value="">alle</option>` + [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"))
+      .map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    $(sel).value = cur;
+  };
+  fill("#sf-owner", sf.rows.map((r) => r.betreuer));
+  fill("#sf-branche", sf.rows.map((r) => r.branche));
+}
+
+function sfFiltered() {
+  const tokens = $("#sf-text").value.toLowerCase().split(/[,;]+|\s{2,}/).map((t) => t.trim()).filter(Boolean);
+  const idleCut = +$("#sf-idle").value ? sfMonthsAgo(+$("#sf-idle").value) : null;
+  const bookCut = +$("#sf-lastbook").value ? sfMonthsAgo(+$("#sf-lastbook").value) : null;
+  const minRev = +$("#sf-minrev").value, owner = $("#sf-owner").value, br = $("#sf-branche").value, minScore = +$("#sf-minscore").value;
+  const mustBook = $("#sf-booked").checked || bookCut || minRev;
+  return sf.rows.filter((r) =>
+    (!tokens.length || tokens.some((t) => (/^\d+$/.test(t) ? r.plz.startsWith(t) : r.ort.toLowerCase().includes(t) || r.name.toLowerCase().includes(t)))) &&
+    (!idleCut || r.letzte_aktivitaet === "nie" || r.letzte_aktivitaet < idleCut) &&
+    (!mustBook || r.gebucht_anzahl > 0) &&
+    (!bookCut || (r.letzte_buchung && r.letzte_buchung < bookCut)) &&
+    (!minRev || r.gebucht_umsatz >= minRev) &&
+    (!owner || r.betreuer === owner) && (!br || r.branche === br) && r.score >= minScore);
+}
 
 function renderSalesforce() {
   const msg = $("#status-msg");
@@ -84,28 +136,47 @@ function renderSalesforce() {
   if (sf.running) {
     $("#summary").innerHTML = "Salesforce wird abgefragt …";
     results.innerHTML = `<div class="sf-empty"><h3>Einen Moment …</h3><pre class="sf-log">${esc(sf.log.join("\n"))}</pre>
-      <p class="hint">Falls sich ein Browser-Fenster öffnet, ist das normal.</p></div>`;
+      <p class="hint">Falls sich ein Browser-Fenster öffnet, ist das normal. Bei vielen Firmen kann es ein paar Minuten dauern.</p></div>`;
     return;
   }
   if (!sf.rows.length) {
-    $("#summary").innerHTML = sf.updated ? "Keine passenden Firmen gefunden." : "Noch keine Liste erstellt.";
+    $("#summary").innerHTML = sf.updated ? "Keine Firmen gefunden." : "Noch keine Liste erstellt.";
     results.innerHTML = `<div class="sf-empty"><h3>${sf.updated ? "Keine Treffer" : "Auf „Liste erstellen“ klicken"}</h3>
-      <p>Links Zeitraum wählen und auf <b>Liste erstellen</b> klicken.</p>${sf.error ? `<p class="warn">${esc(sf.error)}</p>` : ""}</div>`;
+      <p>Links auf <b>Liste erstellen</b> klicken. Danach kannst du nach Ort, PLZ, Betreuung und Buchungen filtern.</p>${sf.error ? `<p class="warn">${esc(sf.error)}</p>` : ""}</div>`;
     return;
   }
-  const text = $("#text").value.trim().toLowerCase();
-  const rows = sf.rows.filter((r) => !text || `${r.name} ${r.plz} ${r.ort} ${r.betreuer}`.toLowerCase().includes(text));
+  const { key, dir } = sf.sort;
+  const rows = sfFiltered().sort((x, y) => {
+    const a = x[key] ?? "", b = y[key] ?? "";
+    return (typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "de")) * dir;
+  });
+  sf.visible = rows;
   const partial = /UNVOLLST/.test(sf.source);
-  $("#summary").innerHTML = `<b>${rows.length}</b> Firmen in Baden-Württemberg ohne Aktivität · Stand ${esc(fmtTime(sf.updated))} · ${esc(sf.source)}`;
+  $("#summary").innerHTML = `<b>${rows.length}</b> von ${sf.rows.length} Firmen · Stand ${esc(fmtTime(sf.updated))} · ${esc(sf.source)}`;
+  const arrow = (k) => (sf.sort.key === k ? (sf.sort.dir > 0 ? " ▲" : " ▼") : "");
+  const th = (k, label) => `<th data-sort="${k}">${label}${arrow(k)}</th>`;
   results.innerHTML = `${partial ? `<div class="sf-warn">Achtung: Die Liste ist unvollständig (Salesforce zeigt in Listenansichten höchstens 2000 Einträge).</div>` : ""}
+    ${!sf.hasBookings ? `<div class="sf-warn">Keine Buchungsdaten verfügbar. Die Filter „gebucht“ und „Umsatz“ zeigen deshalb keine Treffer.</div>` : ""}
     <div class="table-wrap"><table><thead><tr>
-      <th>Firma</th><th>PLZ</th><th>Ort</th><th>Letzte Aktivität</th><th>Betreuer</th><th></th></tr></thead><tbody>
-      ${rows.map((r) => `<tr>
-        <td class="name">${esc(r.name)}</td><td>${esc(r.plz)}</td><td>${esc(r.ort)}</td>
+      ${th("score", "Potenzial")}${th("name", "Firma")}${th("plz", "PLZ / Ort")}${th("branche", "Branche")}${th("letzte_aktivitaet", "Letzte Aktivität")}
+      ${th("gebucht_umsatz", "Bisher gebucht")}${th("betreuer", "Betreuer")}<th></th></tr></thead><tbody>
+      ${rows.slice(0, sf.limit).map((r) => `<tr>
+        <td><span class="score ${r.score >= 60 ? "high" : r.score >= 35 ? "mid" : "low"}" title="${esc(r.why.join("\n"))}">${r.score}</span></td>
+        <td class="name">${esc(r.name)}${r.typ ? `<div class="sub">${esc(r.typ)}</div>` : ""}</td>
+        <td>${esc(r.plz)} ${esc(r.ort)}${r.strasse ? `<div class="sub">${esc(r.strasse)}</div>` : ""}</td>
+        <td>${esc(r.branche)}</td>
         <td>${r.letzte_aktivitaet === "nie" ? `<span class="badge chain">nie</span>` : esc(fmtDate(r.letzte_aktivitaet))}</td>
+        <td>${r.gebucht_anzahl ? `${r.gebucht_anzahl}× · ${sfEur(r.gebucht_umsatz)}<div class="sub">zuletzt ${esc(fmtDate(r.letzte_buchung))}</div>` : `<span class="sub">–</span>`}</td>
         <td>${esc(r.betreuer)}</td>
-        <td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">In Salesforce öffnen</a>` : ""}</td>
-      </tr>`).join("")}</tbody></table></div>`;
+        <td class="contact">${r.telefon ? `<a href="tel:${esc(r.telefon)}">${esc(r.telefon)}</a>` : ""}${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">In Salesforce öffnen</a>` : ""}</td>
+      </tr>`).join("")}</tbody></table></div>
+    ${rows.length > sf.limit ? `<p><button id="sf-more">Weitere ${Math.min(300, rows.length - sf.limit)} anzeigen (${rows.length - sf.limit} übrig)</button></p>` : ""}`;
+  results.querySelectorAll("th[data-sort]").forEach((el) => (el.onclick = () => {
+    const k = el.dataset.sort;
+    sf.sort = { key: k, dir: sf.sort.key === k ? -sf.sort.dir : k === "score" || k === "gebucht_umsatz" ? -1 : 1 };
+    render();
+  }));
+  if ($("#sf-more")) $("#sf-more").onclick = () => { sf.limit += 300; render(); };
 }
 
 function fmtTime(iso) {
@@ -114,12 +185,11 @@ function fmtTime(iso) {
 
 function exportSalesforce() {
   const esc2 = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["Firma", "PLZ", "Ort", "Letzte Aktivität", "Betreuer", "Link"];
-  const lines = sf.rows.map((r) => [r.name, r.plz, r.ort, r.letzte_aktivitaet, r.betreuer, r.url].map(esc2).join(";"));
-  const blob = new Blob(["﻿" + [head.map(esc2).join(";"), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `salesforce_ohne_aktivitaet_${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const cols = [["Potenzial", "score"], ["Firma", "name"], ["PLZ", "plz"], ["Ort", "ort"], ["Straße", "strasse"], ["Branche", "branche"],
+    ["Letzte Aktivität", "letzte_aktivitaet"], ["Buchungen", "gebucht_anzahl"], ["Umsatz bisher", "gebucht_umsatz"],
+    ["Letzte Buchung", "letzte_buchung"], ["Betreuer", "betreuer"], ["Telefon", "telefon"], ["Website", "website"], ["Link", "url"]];
+  const rows = sf.visible || [];
+  if (!rows.length) return message("Keine Daten zum Exportieren.");
+  const lines = rows.map((r) => cols.map(([, k]) => esc2(r[k])).join(";"));
+  download(`salesforce_${new Date().toISOString().slice(0, 10)}.csv`, "\ufeff" + [cols.map(([h]) => esc2(h)).join(";"), ...lines].join("\r\n"), "text/csv;charset=utf-8");
 }
