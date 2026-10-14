@@ -19,17 +19,17 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Pakete installieren
-        run: pip install osmium shapely
+        run: pip install osmium shapely pyarrow
       - name: Tests
         run: python -m unittest discover -s tests
-      - name: Firmen, Neugründungen und News für alle Kreise sammeln
+      - name: Firmen (OSM + Overture), Neugründungen und News für alle Kreise sammeln
         run: python -m leadgen.webexport --out site --pbf bw.osm.pbf --previous https://markus90ms-eng.github.io/Leadgenerator
       - uses: actions/upload-pages-artifact@v3
         with:

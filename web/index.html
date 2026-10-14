@@ -12,10 +12,10 @@
 <header>
   <h1>Leadgenerator <span>Baden-Württemberg</span></h1>
   <nav id="tabs">
+    <button data-tab="eigene">Eigene Leads</button>
     <button data-tab="search" class="active">Firmensuche</button>
     <button data-tab="new">Neugründungen</button>
     <button data-tab="news">News-Radar</button>
-    <button data-tab="eigene">Eigene Leads</button>
     <button data-tab="pipeline">Meine Pipeline</button>
     <button data-tab="salesforce">Salesforce</button>
   </nav>
@@ -93,7 +93,7 @@
         <label>Branchen</label>
         <span class="links"><a href="#" id="cats-all">alle</a> · <a href="#" id="cats-none">keine</a></span>
       </div>
-      <div id="cats" class="checklist"></div>
+      <div id="cats" class="checklist cat-tree"></div>
     </section>
 
     <section class="only-new">
@@ -115,6 +115,16 @@
       <label>Filter</label>
       <label class="check only-search only-new"><input type="checkbox" id="hide-chains" checked> Ketten/Filialen ausblenden</label>
       <label class="check only-search only-new"><input type="checkbox" id="need-contact"> nur mit Telefon/E-Mail/Website</label>
+      <label class="check only-search only-new" title="Zusätzliche Betriebe aus Overture Maps mit geringer Sicherheit (z. B. veraltet oder ungenau)"><input type="checkbox" id="show-unsure"> auch unsichere Einträge zeigen</label>
+      <label for="size-filter">Unternehmensgröße (geschätzt)</label>
+      <select id="size-filter">
+        <option value="">alle</option>
+        <option value="M">ab mittel (M und L)</option>
+        <option value="L">nur groß (L)</option>
+      </select>
+      <label class="check" title="Grün: sucht Personal, Shop, Social Media, mehrere Standorte, gut erreichbar …"><input type="checkbox" id="only-green"> nur grüne Ampel</label>
+      <label class="check"><input type="checkbox" id="hiring"> sucht Personal (laut Website)</label>
+      <label class="check only-search only-new only-eigene" title="Betriebe mit gleicher Website (z. B. alle Kinderhäuser eines Trägers) nur einmal zeigen"><input type="checkbox" id="group-collapse"> Gruppen zusammenfassen</label>
       <label for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
       <input type="search" id="text" placeholder="Name, Ort, Straße …">
@@ -169,7 +179,7 @@
       </div>
     </section>
 
-    <p class="hint">Daten: OpenStreetMap (Firmen), Google News (Meldungen) und Ströer-Standortkarte (Werbeträger). Jeden Morgen automatisch aktualisiert.</p>
+    <p class="hint">Daten: © OpenStreetMap-Mitwirkende (ODbL) und Overture Maps Foundation (CDLA-Permissive-2.0) für Firmen, Google News (Meldungen) und Ströer-Standortkarte (Werbeträger). Jeden Morgen automatisch aktualisiert.</p>
   </aside>
 
   <main>
@@ -189,6 +199,41 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<dialog id="mail-dialog">
+  <form method="dialog" class="mail-form">
+    <h3>Mail an <span id="mail-firma"></span></h3>
+    <div class="mail-grid">
+      <label>Vorlage
+        <select id="mail-vorlage">
+          <option value="telefonat">Nach dem Telefonat</option>
+          <option value="termin">Terminbestätigung</option>
+          <option value="unterlagen">Unterlagen wie besprochen</option>
+        </select>
+      </label>
+      <label>An<input id="mail-to" type="email" placeholder="E-Mail-Adresse"></label>
+      <label>Anrede
+        <select id="mail-anrede"><option value="">Damen und Herren</option><option>Frau</option><option>Herr</option></select>
+      </label>
+      <label>Nachname<input id="mail-name" placeholder="z. B. Grauer"></label>
+    </div>
+    <div class="mail-grid" id="mail-termin" hidden>
+      <label>Datum<input id="mail-datum" type="date"></label>
+      <label>Uhrzeit<input id="mail-zeit" type="time" step="900"></label>
+      <label>Ort<input id="mail-ort" placeholder="z. B. bei Ihnen vor Ort / telefonisch"></label>
+    </div>
+    <label>Betreff<input id="mail-subject"></label>
+    <label>Text<textarea id="mail-body" rows="14"></textarea></label>
+    <p class="hint" id="mail-anhang" hidden>Anhänge bitte in Outlook hinzufügen.</p>
+    <p class="hint">Der Text lässt sich hier noch anpassen. Bitte nur nach vorherigem Kontakt mailen (Werbe-Mails ohne Einwilligung sind unzulässig).</p>
+    <div class="mail-actions">
+      <button id="mail-send" class="pitch-btn">In Outlook öffnen</button>
+      <button id="mail-copy">Text kopieren</button>
+      <button id="mail-cancel">Abbrechen</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="signale.js"></script>
 <script src="eigene.js"></script>
 <script src="salesforce.js"></script>
 <script src="sfcheck.js"></script>

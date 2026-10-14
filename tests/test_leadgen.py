@@ -10,8 +10,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from leadgen import news, overpass, service, stroeer  # noqa: E402
-from leadgen.categories import classify  # noqa: E402
+from leadgen import news, overpass, overture, service, stroeer, webcheck  # noqa: E402
+from leadgen.categories import CATEGORIES, GROUPS, classify, classify_overture  # noqa: E402
 from leadgen.db import Store  # noqa: E402
 from leadgen.regions import KREISE  # noqa: E402
 
@@ -43,6 +43,57 @@ STROEER_ROWS = [
     {"uid": "y", "sdaw": "135000009467301", "Paechter": "0135", "Typ": "GF",  # Fremdfläche
      "UTMBA": "48.6844566287", "UTMLA": "8.9943058044", "Netz": "0"},
 ]
+
+
+def ov_row(oid, name, primary, hierarchy, lat, lon, conf=0.9, phones=None, websites=None, status=None, postcode="71034"):
+    return {"id": oid, "names": {"primary": name}, "confidence": conf, "phones": phones, "websites": websites,
+            "emails": None, "brand": None, "operating_status": status,
+            "addresses": [{"freeform": "Teststr. 1", "postcode": postcode, "locality": "Böblingen", "country": "DE"}],
+            "taxonomy": {"primary": primary, "hierarchy": hierarchy}, "bbox": {"xmin": lon, "ymin": lat}}
+
+
+OVERTURE_ROWS = [
+    # Dublette zu "Autohaus Müller" aus OSM (gleiche Telefonnummer, wenige Meter daneben)
+    ov_row("aaaaaaaa-0000-0000-0000-000000000001", "Autohaus Müller GmbH", "auto_dealer",
+           ["shopping", "vehicle_dealer", "auto_dealer"], 48.6801, 9.0102, phones=["+497031 12345"],
+           websites=["https://www.autohaus-mueller.de/"]),
+    ov_row("bbbbbbbb-0000-0000-0000-000000000002", "Bickel GmbH Bäder", "hvac_service",
+           ["services_and_business", "home_service", "hvac_service"], 48.69, 9.02, phones=["04971 31570001"],
+           websites=["https://bickelgmbh.de/"]),
+    ov_row("abababab-0000-0000-0000-000000000009", "Bickel Kundendienst", "plumbing",
+           ["services_and_business", "home_service", "plumbing"], 48.75, 9.05, phones=["07131 570001"],
+           websites=["http://www.bickelgmbh.de/service"]),
+    ov_row("acacacac-0000-0000-0000-000000000010", "Kinderhaus Spatzennest", "elementary_school",
+           ["education", "school", "elementary_school"], 48.72, 9.04, websites=["https://element-i.de/"]),
+    ov_row("cccccccc-0000-0000-0000-000000000003", "Maler Klein", "painting",
+           ["services_and_business", "home_service", "painting"], 48.71, 9.03, conf=0.5, phones=["070311111"]),
+    ov_row("dddddddd-0000-0000-0000-000000000004", "Alter Laden", "clothing_store",
+           ["shopping", "fashion_and_apparel_store", "clothing_store"], 48.71, 9.03, status="permanently_closed"),
+    ov_row("eeeeeeee-0000-0000-0000-000000000005", "Geldautomat", "atm", ["services_and_business", "financial_service", "atm"],
+           48.71, 9.03),
+    ov_row("ffffffff-0000-0000-0000-000000000006", "Draußen GmbH", "plumbing", ["services_and_business", "home_service", "plumbing"],
+           49.5, 9.5),
+]
+
+
+def fake_overture_read(log=print, **kw):
+    return [l for l in map(overture.place_to_lead, OVERTURE_ROWS) if l], "test"
+
+
+WEB_PAGES = {
+    "https://bickelgmbh.de/": '<a href="/impressum">Impressum</a> <a href="/karriere">Karriere</a> '
+                              '<a href="https://www.instagram.com/bickel/">Insta</a> In den Warenkorb',
+    "https://bickelgmbh.de/impressum": "<p>Bickel GmbH</p><p>Registergericht: AG Stuttgart HRB 102030</p>"
+                                       "<p>Stammkapital: 50.000 €</p>",
+    "https://bickelgmbh.de/karriere": "<ul><li>Anlagenmechaniker SHK (m/w/d)</li><li>Kundendienst (w/m/d)</li></ul>",
+    "https://autohaus-mueller.de/": "<p>Willkommen</p>",
+    "https://autohaus-mueller.de/robots.txt": "User-agent: *\nDisallow: /",
+}
+
+
+def fake_web_fetch(url, timeout=10):
+    page = WEB_PAGES.get(url)
+    return (url, page) if page else None
 
 
 def fake_stroeer_get(params):
@@ -89,7 +140,8 @@ class RegionsTest(unittest.TestCase):
 
 class OverpassTest(unittest.TestCase):
     def test_query_contains_area_and_filters(self):
-        q = overpass.build_query("08115", ["gastro"], newer_than="2026-01-01T00:00:00Z")
+        q = overpass.build_query("08115", ["restaurant", "privatschule"], newer_than="2026-01-01T00:00:00Z")
+        self.assertIn('nwr["amenity"~"^(school)$"]["operator:type"~"^(private|privat)$"]["name"]', q)
         self.assertIn('"de:amtlicher_gemeindeschluessel"="08115"', q)
         self.assertIn('"name"="Landkreis Böblingen"', q)
         self.assertIn('(newer:"2026-01-01T00:00:00Z")(area.kreis)', q)
@@ -97,8 +149,20 @@ class OverpassTest(unittest.TestCase):
 
     def test_classify(self):
         self.assertEqual(classify({"shop": "car"}), "autohaus")
-        self.assertEqual(classify({"craft": "electrician"}), "handwerk")
+        self.assertEqual(classify({"craft": "electrician"}), "elektro")
+        self.assertEqual(classify({"craft": "plumber"}), "sanitaer")
+        self.assertEqual(classify({"shop": "bathroom_furnishing"}), "kuechen")
+        self.assertEqual(classify({"craft": "basket_maker"}), "handwerk")  # Sammelbranche zuletzt
+        self.assertEqual(classify({"amenity": "school", "operator:type": "private"}), "privatschule")
+        self.assertEqual(classify({"amenity": "school"}), "schule")
         self.assertIsNone(classify({"amenity": "bench"}))
+        self.assertEqual(classify_overture("hvac_service", ["services_and_business", "home_service", "hvac_service"]),
+                         "sanitaer")
+        self.assertEqual(classify_overture("pizza_restaurant", ["food_and_drink", "restaurant", "pizza_restaurant"]),
+                         "restaurant")
+        self.assertIsNone(classify_overture("atm", ["services_and_business", "financial_service", "atm"]))
+        groups = {g for g, _ in GROUPS}
+        self.assertTrue(all(c["group"] in groups for c in CATEGORIES.values()))
 
     def test_parse_and_detect_new(self):
         with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE):
@@ -123,8 +187,8 @@ class ServiceTest(unittest.TestCase):
 
     def test_search_scores_and_fresh_detection(self):
         with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE) as rq:
-            leads = service.search_companies(self.store, "08115", ["autohaus", "gastro"])
-            self.assertEqual(rq.call_count, 2)
+            leads = service.search_companies(self.store, "08115", ["autohaus", "restaurant", "imbiss"])
+            self.assertEqual(rq.call_count, 3)
             self.assertTrue(all(not l["fresh"] for l in leads))  # Erster Scan: nichts "neu seit letztem Scan"
             by_name = {l["name"]: l for l in leads}
             self.assertGreater(by_name["Autohaus Müller"]["score"], by_name["McDonald's"]["score"])
@@ -137,7 +201,7 @@ class ServiceTest(unittest.TestCase):
             # Neuer Betrieb taucht beim nächsten Scan auf -> fresh
             extra = {"type": "node", "id": 99, "lat": 1, "lon": 1, "tags": {"name": "Burger Lab", "amenity": "restaurant"}}
             rq.return_value = {"elements": OVERPASS_RESPONSE["elements"] + [extra]}
-            leads = service.search_companies(self.store, "08115", ["autohaus", "gastro"], refresh=True)
+            leads = service.search_companies(self.store, "08115", ["autohaus", "restaurant", "imbiss"], refresh=True)
             self.assertEqual(leads[0]["name"], "Burger Lab")
             self.assertTrue(leads[0]["fresh"])
             auto = next(l for l in leads if l["name"] == "Autohaus Müller")
@@ -145,8 +209,8 @@ class ServiceTest(unittest.TestCase):
 
     def test_search_uses_cache(self):
         with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE) as rq:
-            service.search_companies(self.store, "08115", ["gastro"])
-            service.search_companies(self.store, "08115", ["gastro"])
+            service.search_companies(self.store, "08115", ["restaurant"])
+            service.search_companies(self.store, "08115", ["restaurant"])
             self.assertEqual(rq.call_count, 1)
 
     def test_find_new(self):
@@ -215,28 +279,53 @@ class WebExportTest(unittest.TestCase):
             real = news.search_news
             prev = {"updated": "2026-01-01", "leads": [{"id": "osm:node/10", "first_seen": ""}]}
             with mock.patch.object(news, "search_news", lambda ags, topics=None, days=30: real(ags, topics, days, fetch=lambda u: RSS)), \
+                    mock.patch.object(overture, "read_places", fake_overture_read), \
+                    mock.patch.object(webcheck, "fetch", fake_web_fetch), \
                     mock.patch.object(webexport, "fetch_previous",
                                       lambda base, path: prev if path == "data/kreis/08115.json" else None):
                 with mock.patch.object(stroeer.Client, "get", side_effect=fake_stroeer_get):
                     self.assertEqual(webexport.main(["--out", out, "--pbf", MINI_OSM, "--previous", "x"]), 0)
-            with open(os.path.join(out, "data/kreis/08115.json"), encoding="utf-8") as fh:
-                leads = {l["name"]: l for l in json.load(fh)["leads"]}
+            leads = {}
+            for name in ("08115.json", "08115-unsicher.json"):
+                with open(os.path.join(out, "data/kreis", name), encoding="utf-8") as fh:
+                    leads.update({l["name"]: l for l in json.load(fh)["leads"]})
             self.assertNotIn("first_seen", leads["Autohaus Müller"])  # schon bekannt
             self.assertTrue(leads["Pasta Nova"]["first_seen"])  # neu seit letztem Lauf
+            # Overture: Dublette zusammengeführt, neue Betriebe ergänzt, aber nicht als "neu" markiert
+            self.assertEqual(leads["Autohaus Müller"]["website"], "https://www.autohaus-mueller.de/")
+            self.assertNotIn("Autohaus Müller GmbH", leads)
+            bickel = leads["Bickel GmbH Bäder"]
+            self.assertEqual((bickel["category"], bickel["phone"], bickel["kind"]), ("sanitaer", "07131570001", "Heizung & Klima"))
+            self.assertNotIn("first_seen", bickel)
+            self.assertEqual(leads["Maler Klein"]["u"], 1)
+            self.assertEqual(leads["Kinderhaus Spatzennest"]["category"], "kita")  # nicht "Schule"
+            self.assertFalse({"Alter Laden", "Geldautomat", "Draußen GmbH"} & set(leads))
+            # Rechtsform aus dem Namen, Signale aus dem Website-Check
+            self.assertEqual(bickel["rf"], "GmbH")
+            self.assertEqual(bickel["ws"], {"rf": "GmbH", "hr": 1, "kap": 50000, "kar": 1, "jobs": 2, "shop": 1, "soc": 1})
+            self.assertNotIn("ws", leads["Autohaus Müller"])  # robots.txt sperrt
+            # Gruppe: Bickel hat zwei Standorte mit gleicher Website
+            self.assertEqual((bickel["grp"], bickel["st"]), ("bickelgmbh.de", 2))
+            with open(os.path.join(out, "data/gruppen", webexport.group_shard("bickelgmbh.de") + ".json"), encoding="utf-8") as fh:
+                grp = json.load(fh)["bickelgmbh.de"]
+            self.assertEqual((grp["name"], grp["n"], grp["zentrale"]), ("Bickel", 2, "07131570001"))
+            with open(os.path.join(out, "data/web", webcheck.shard_of("autohaus-mueller.de") + ".json"), encoding="utf-8") as fh:
+                self.assertEqual(json.load(fh)["sites"]["autohaus-mueller.de"]["rb"], 1)
             self.assertTrue(os.path.exists(os.path.join(out, "index.html")))
             with open(os.path.join(out, "data/meta.json"), encoding="utf-8") as fh:
                 status = json.load(fh)["status"]
-            self.assertEqual(status["08115"]["count"], 3)
+            self.assertEqual((status["08115"]["count"], status["08115"]["unsure"]), (6, 1))
+            self.assertEqual(status["08115"]["osm"], 3)
             self.assertEqual(status["08111"]["count"], 0)
             self.assertEqual(status["08115"]["stroeer"], 1)  # einer innerhalb, einer außerhalb des Kreises
             with open(os.path.join(out, "data/stroeer/08115.json"), encoding="utf-8") as fh:
                 item = json.load(fh)["items"][0]
             self.assertEqual((item["typ"], item["id"], item["paechter"]), ("GF", "368000022377402", "368"))
             self.assertNotIn("preis", item)
-            with open(os.path.join(out, "data/suche.json"), encoding="utf-8") as fh:
-                index = json.load(fh)
-            self.assertIn("Autohaus Müller", {r[1] for r in index["rows"]})
-            self.assertEqual(index["plz"]["71034"], ["08115", "Böblingen"])
+            with open(os.path.join(out, "data/suche/08115.json"), encoding="utf-8") as fh:
+                self.assertIn("Bickel GmbH Bäder", {r[1] for r in json.load(fh)["rows"]})
+            with open(os.path.join(out, "data/suche/meta.json"), encoding="utf-8") as fh:
+                self.assertEqual(json.load(fh)["plz"]["71034"], ["08115", "Böblingen"])
 
     def test_search_index_normalizes_contacts(self):
         from leadgen.webexport import norm_domain, norm_phone, search_row
@@ -249,6 +338,28 @@ class WebExportTest(unittest.TestCase):
                           "email": "a@firma.de", "website": "firma.de"}, "08115")
         self.assertEqual(row, ["osm:node/1", "X", "08115", "07031222 0711123", "firma.de", ""])
 
+    def test_webcheck_legal_form(self):
+        self.assertEqual(webcheck.legal_form("Müller GmbH & Co. KG"), "GmbH & Co. KG")
+        self.assertEqual(webcheck.legal_form("Registergericht: AG Stuttgart, Schmid GmbH"), "GmbH")
+        self.assertEqual(webcheck.legal_form("Holz Meier UG (haftungsbeschränkt)"), "UG")
+        self.assertEqual(webcheck.legal_form("Bäckerei Schmid"), "")
+        self.assertEqual(webcheck.domain_of("https://www.Bickel-GmbH.de/kontakt"), "bickel-gmbh.de")
+
+    def test_overture_phone_and_merge(self):
+        self.assertEqual(overture.norm_phone("04971 31570001"), "07131570001")
+        self.assertEqual(overture.norm_phone("497131570001"), "07131570001")
+        self.assertEqual(overture.norm_phone("+49491628484420"), "01628484420")
+        self.assertEqual(overture.norm_phone("+49 711 123456"), "0711123456")
+        osm = [{"id": "osm:node/1", "name": "Bäckerei Schmid", "lat": 48.7, "lon": 9.0, "phone": ""}]
+        extra = [
+            {"id": "ov:1", "name": "Schmid Bäckerei GmbH", "lat": 48.7003, "lon": 9.0002, "phone": "0711999"},
+            {"id": "ov:2", "name": "Bäckerei Schmid", "lat": 48.75, "lon": 9.0, "phone": ""},  # andere Filiale
+            {"id": "ov:3", "name": "Sparkasse", "lat": 48.8, "lon": 9.1, "phone": "0711999"},  # gleiche Nummer, weit weg
+        ]
+        merged, dupes = overture.merge(osm, extra)
+        self.assertEqual([l["id"] for l in merged], ["osm:node/1", "ov:2", "ov:3"])
+        self.assertEqual((dupes, merged[0]["phone"]), (1, "0711999"))
+
     def test_first_seen_ignores_empty_or_baseline_data(self):
         from leadgen.webexport import carry_first_seen
 
@@ -260,6 +371,11 @@ class WebExportTest(unittest.TestCase):
         prev = {"updated": "2026-10-07", "leads": [{"id": "a", "first_seen": "2026-10-07"}]}
         self.assertEqual(carry_first_seen(leads, prev, "2026-10-08"), "2026-10-07")
         self.assertEqual([l["first_seen"] for l in leads], ["", "2026-10-08"])
+        # Neue Datenquelle (Overture) -> Bestand, nicht "neu"
+        prev = {"updated": "2026-10-07", "baseline": "2026-10-01", "leads": [{"id": "osm:node/1"}]}
+        leads = [{"id": "osm:node/1"}, {"id": "osm:node/2"}, {"id": "ov:abc"}]
+        carry_first_seen(leads, prev, "2026-10-08")
+        self.assertEqual([l.get("first_seen") for l in leads], ["", "2026-10-08", None])
 
 
 class ServerTest(unittest.TestCase):
@@ -276,7 +392,7 @@ class ServerTest(unittest.TestCase):
             self.assertEqual(len(meta["kreise"]), 44)
             self.assertIn("<title>Leadgenerator BW</title>", urllib.request.urlopen(base + "/").read().decode())
             with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE):
-                leads = json.load(urllib.request.urlopen(base + "/api/search?kreis=08115&cats=gastro"))
+                leads = json.load(urllib.request.urlopen(base + "/api/search?kreis=08115&cats=restaurant,imbiss"))
             self.assertEqual({l["name"] for l in leads}, {"Pasta Nova", "McDonald's"})
             req = urllib.request.Request(base + "/api/leads/" + urllib.request.quote(leads[0]["id"], safe=""),
                                          data=json.dumps({"status": "termin"}).encode(), method="POST")

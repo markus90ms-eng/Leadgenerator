@@ -2,7 +2,7 @@
 
 Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-Württemberg**.
 
-- **Firmensuche** – alle 44 Stadt- und Landkreise, 17 Branchen (Autohäuser, Gastronomie, Fitness, Möbel, Handwerk …)
+- **Firmensuche** – alle 44 Stadt- und Landkreise, rund 95 Unterbranchen in 19 Hauptbranchen (z. B. Bau & Handwerk → Bad, Sanitär & Heizung), aufklappbar und mit Anzahl je Kreis. Quellen: OpenStreetMap und Overture Maps (u. a. Handwerksbetriebe ohne Ladengeschäft), Dubletten werden zusammengeführt; unsichere Einträge lassen sich zuschalten.
 - **Neugründungen** – findet automatisch Betriebe, die neu eröffnet haben oder neu eingetragen wurden
 - **News-Radar** – aktuelle Meldungen zu Neueröffnungen, Gründungen, Start-ups und neuen Standorten je Kreis
 - **Werbepotenzial-Score** (0–100) – priorisiert nach Branche, Neueröffnung und Erreichbarkeit; Ketten werden abgewertet (Marketing läuft dort zentral)
@@ -11,13 +11,18 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 - **Karte** mit allen Treffern
 - **Pitch mit Claude** – Knopf pro Betrieb öffnet claude.ai mit einer fertigen Anfrage (Firmendaten, Ströer-Flächen in der Nähe, Gesprächsleitfaden); Claude sieht sich die Website an und schreibt einen individuellen Telefonpitch inkl. Einwandbehandlung.
 - **Eigene Leads aus Fotos** – Fotos von Fahrzeug-, Schild- oder Plakatwerbung hochladen (auch mehrere, am Handy direkt aus Kamera/Galerie). Die Texterkennung läuft im Browser, erkennt Telefonnummer, Website, E-Mail und Firmenname und gleicht sie mit allen Betrieben in BW ab. Nach kurzer Prüfung wird daraus ein Lead mit Ströer-Flächen, Score, Pipeline und Pitch-Knopf. Die Fotos bleiben auf dem Gerät.
+- **Größe & Ampel** – geschätzte Unternehmensgröße (S/M/L) aus Rechtsform, Anzahl Standorte und Website-Angaben; Ampel (grün/gelb/rot) aus Aktivitätssignalen wie „sucht Personal“, Online-Shop, Social Media. Filter „ab mittel“, „nur grün“, „sucht Personal“. Edeka, Rewe & Co. zählen als Händlerverbund (oft selbstständige Kaufleute), nicht als Kette.
+- **Website-Check** – jede Nacht werden bis zu 15.000 Firmen-Websites geprüft (Startseite, Impressum, Karriereseite; robots.txt wird beachtet, keine Personendaten). Nach etwa zwei bis drei Wochen sind alle Websites einmal erfasst, danach wird alle 90 Tage aufgefrischt.
+- **Gruppen** – Betriebe mit gleicher Firmen-Website (z. B. alle Kinderhäuser eines Trägers) werden über alle Kreise als Gruppe erkannt: Abzeichen mit Anzahl Standorte, aufklappbare Liste mit vermuteter Zentrale, Schalter „Gruppen zusammenfassen“. Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.
+- **Mail an Outlook** – Knopf „Mail“ bzw. Klick auf die E-Mail-Adresse: Vorlage wählen (nach dem Telefonat, Terminbestätigung, Unterlagen), Ansprechpartner eintragen, Text prüfen, in Outlook öffnen. Nur nach vorherigem Kontakt verwenden (UWG).
+- **Nachschlagen** – Links zu North Data, Handelsregister und Jobbörse je Betrieb.
 - **Ströer-Werbeträger im Umkreis** – zeigt pro Betrieb die Ströer-Flächen in der Nähe (Großfläche, City-Light, DOOH …), filterbar nach Trägerart, mit Kartenebene und CSV-Spalten. Quelle: öffentliche Ströer-Standortkarte; nur Ströer-eigene Flächen (Pächter 368, 252), ohne Preise.
 
 ## Web-Version (ohne Installation)
 
 **https://markus90ms-eng.github.io/Leadgenerator/**
 
-Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
+Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) und dem offenen Overture-Maps-Datensatz „places“ (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
 
 Status und Notizen der Pipeline werden im Browser gespeichert; über *Meine Pipeline → Sicherung speichern* lassen sie sich als Datei sichern.
 
@@ -60,7 +65,7 @@ Hinweis: Handelsregister-Neueintragungen und Gewerbeanmeldungen sind nicht frei 
 
 ## Datenschutz & Recht
 
-Alle Leads, Status und Notizen liegen nur lokal in `leads.db`. Genutzt werden ausschließlich öffentliche Firmendaten (OpenStreetMap, © OpenStreetMap-Mitwirkende, ODbL). Bei der Kaltakquise die UWG-Regeln beachten (B2B-Anrufe nur bei mutmaßlicher Einwilligung, keine Werbe-E-Mails ohne Einwilligung).
+Alle Leads, Status und Notizen liegen nur lokal in `leads.db` bzw. im Browser. Genutzt werden ausschließlich offen lizenzierte Firmendaten: © OpenStreetMap-Mitwirkende (ODbL) und Overture Maps Foundation (CDLA-Permissive-2.0). Bei der Kaltakquise die UWG-Regeln beachten (B2B-Anrufe nur bei mutmaßlicher Einwilligung, keine Werbe-E-Mails ohne Einwilligung).
 
 ## Tests
 

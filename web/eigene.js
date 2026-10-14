@@ -101,22 +101,44 @@ function extractFromText(text, lines = [], plzTable = {}) {
 }
 
 // ---------- Suchindex aller Betriebe (data/suche.json) ---------------------
-let searchIndex = null;
-async function getSearchIndex() {
-  if (searchIndex) return searchIndex;
-  const data = await getJson("data/suche.json");
-  const rows = data.rows.map(([id, name, kreis, phone, domain, plz]) => ({ id, name, kreis, plz: plz || "",
-    phones: phone ? phone.split(" ") : [], domains: domain ? domain.split(" ") : [] }));
-  const byPhone = new Map(), byDomain = new Map(), byToken = new Map();
-  rows.forEach((r, i) => {
-    for (const p of r.phones) byPhone.set(p, [...(byPhone.get(p) || []), i]);
-    for (const d of r.domains) byDomain.set(d, [...(byDomain.get(d) || []), i]);
-    r.tokens = [...new Set(nameTokens(r.name))];
-    for (const t of r.tokens) { if (!byToken.has(t)) byToken.set(t, []); byToken.get(t).push(i); }
-  });
-  const idf = (t) => Math.log(rows.length / (byToken.get(t)?.length || 1));
-  searchIndex = { rows, byPhone, byDomain, byToken, idf, plz: data.plz || {} };
-  return searchIndex;
+// Suchindex liegt pro Kreis in data/suche/<ags>.json; geladen werden nur die
+// Kreise, auf die das Foto hindeutet (PLZ, Vorwahl) plus der gewählte Kreis.
+const searchIndex = { rows: [], byPhone: new Map(), byDomain: new Map(), byToken: new Map(), loaded: new Set(),
+  meta: null, idf(t) { return Math.log(this.rows.length / (this.byToken.get(t)?.length || 1)); } };
+
+async function getSearchMeta() {
+  if (!searchIndex.meta) searchIndex.meta = await getJson("data/suche/meta.json").catch(() => ({ plz: {}, vorwahl: {} }));
+  return searchIndex.meta;
+}
+
+async function loadShards(kreise) {
+  const ix = searchIndex;
+  const todo = [...kreise].filter((a) => a && !ix.loaded.has(a));
+  const shards = await Promise.all(todo.map((a) => getJson(`data/suche/${a}.json`).catch(() => ({ rows: [] }))));
+  todo.forEach((a) => ix.loaded.add(a));
+  for (const shard of shards) {
+    for (const [id, name, kreis, phone, domain, plz] of shard.rows) {
+      const i = ix.rows.length;
+      const r = { id, name, kreis, plz: plz || "", phones: phone ? phone.split(" ") : [], domains: domain ? domain.split(" ") : [],
+        tokens: [...new Set(nameTokens(name))] };
+      ix.rows.push(r);
+      for (const p of r.phones) { if (!ix.byPhone.has(p)) ix.byPhone.set(p, []); ix.byPhone.get(p).push(i); }
+      for (const d of r.domains) { if (!ix.byDomain.has(d)) ix.byDomain.set(d, []); ix.byDomain.get(d).push(i); }
+      for (const t of r.tokens) { if (!ix.byToken.has(t)) ix.byToken.set(t, []); ix.byToken.get(t).push(i); }
+    }
+  }
+  return ix;
+}
+
+// Kreise, auf die das Foto hindeutet
+function hintedKreise(found, meta) {
+  const out = new Set([found.kreis, $("#kreis").value]);
+  for (const p of found.phones) {
+    for (const n of [6, 5, 4]) if (meta.vorwahl?.[p.slice(0, n)]) { out.add(meta.vorwahl[p.slice(0, n)]); break; }
+  }
+  out.delete("");
+  out.delete(undefined);
+  return out;
 }
 
 // Betriebe aus den Daten, die zum Foto passen (Telefon/Domain sicher, Name unscharf, PLZ als Bestätigung)
@@ -130,8 +152,8 @@ function findCandidates(ix, found, text) {
   };
   for (const p of found.phones) {
     for (const i of ix.byPhone.get(p) || []) add(i, 100, "Telefon");
-    if (p.length >= 8) { // Durchwahl oder fehlende Vorwahl
-      for (const [q, list] of ix.byPhone) if (q !== p && (q.endsWith(p.slice(1)) || p.endsWith(q.slice(1))) && Math.min(p.length, q.length) >= 8) list.forEach((i) => add(i, 60, "Telefon"));
+    if (p.length >= 8) { // Zentrale vs. Durchwahl: 07031 1234-0 / 07031 1234-56
+      for (const [q, list] of ix.byPhone) if (q !== p && q.length >= 8 && (q.startsWith(p) || p.startsWith(q))) list.forEach((i) => add(i, 60, "Telefon"));
     }
   }
   for (const d of found.domains) for (const i of ix.byDomain.get(d) || []) add(i, 100, "Website");
@@ -277,7 +299,7 @@ async function processQueue() {
         const img = await loadImage(job.file);
         job.thumb = scaled(img, 360, "image/jpeg", 0.6);
         renderQueue();
-        const [worker, ix] = await Promise.all([getOcrWorker(), getSearchIndex()]);
+        const [worker, meta] = await Promise.all([getOcrWorker(), getSearchMeta()]);
         // Zwei Durchgänge: normal und invertiert (helle Schrift auf dunklem Grund)
         const big = scaled(img, 3200, null);
         const texts = [], lines = [];
@@ -288,7 +310,8 @@ async function processQueue() {
           lines.push(...(data.lines || []));
         }
         job.text = texts.join("\n");
-        job.found = extractFromText(job.text, lines, ix.plz);
+        job.found = extractFromText(job.text, lines, meta.plz || {});
+        const ix = await loadShards(hintedKreise(job.found, meta));
         job.candidates = findCandidates(ix, job.found, job.text);
         job.form = {
           name: job.found.names[0] || "", category: "", kreis: job.found.kreis || $("#kreis").value,
@@ -313,13 +336,33 @@ async function processQueue() {
   }
 }
 
+// Vollständige Daten eines Treffers (aus der Kreisdatei, ggf. aus den unsicheren Einträgen)
+const leadFiles = {};
 async function fetchLead(cand) {
-  const data = state.kreisData[cand.kreis] || await getJson(`data/kreis/${cand.kreis}.json`);
-  if (!state.kreisData[cand.kreis]) {
-    for (const l of data.leads) l.kreis = cand.kreis;
-    state.kreisData[cand.kreis] = data;
+  const find = (list) => (list || []).find((l) => l.id === cand.id);
+  const known = state.kreisData[cand.kreis];
+  let hit = find(known?.leads) || find(known?.unsure);
+  for (const file of [`${cand.kreis}.json`, `${cand.kreis}-unsicher.json`]) {
+    if (hit) break;
+    leadFiles[file] ||= getJson(`data/kreis/${file}`).then((d) => d.leads).catch(() => []);
+    hit = find(await leadFiles[file]);
   }
-  return data.leads.find((l) => l.id === cand.id);
+  return hit ? { ...hit, kreis: cand.kreis } : null;
+}
+
+// Kein sicherer Treffer: alle Kreise durchsuchen (lädt den ganzen Index)
+async function searchEverywhere(job) {
+  job.searching = true;
+  renderQueue();
+  try {
+    const ix = await loadShards(state.meta.kreise.map((k) => k.ags));
+    job.candidates = findCandidates(ix, job.found, job.text);
+    if (job.candidates[0]?.sure) await pickCandidate(job, job.candidates[0].id);
+  } finally {
+    job.searching = false;
+    job.searchedAll = true;
+    renderQueue();
+  }
 }
 
 async function pickCandidate(job, id) {
@@ -343,8 +386,9 @@ function updateJobProgress(job) {
   if (el) el.textContent = `Texterkennung (Durchgang ${job.pass || 1}/2) … ${job.progress} %`;
 }
 
-const catOptions = (sel) => `<option value="">– Branche wählen –</option>` + state.meta.categories.map((c) =>
-  `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+const catOptions = (sel) => `<option value="">– Branche wählen –</option>` + (state.meta.groups || [{ id: undefined, name: "" }]).map((g) =>
+  `<optgroup label="${esc(g.name)}">${state.meta.categories.filter((c) => c.group === g.id).map((c) =>
+    `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>`).join("");
 const kreisOptions = (sel) => state.meta.kreise.map((k) =>
   `<option value="${k.ags}" ${k.ags === sel ? "selected" : ""}>${esc(k.name)}</option>`).join("");
 
@@ -369,6 +413,7 @@ function jobHtml(job) {
     <div class="found">${chips}</div>
     <div class="cands">
       <div class="label">${job.candidates.length ? "Passende Betriebe in deinen Daten" : "Kein passender Betrieb in den Daten gefunden – bitte Angaben prüfen"}</div>
+      ${!job.searchedAll && !job.candidates.some((c) => c.sure) ? `<button data-everywhere="${job.key}" ${job.searching ? "disabled" : ""}>${job.searching ? "Suche in allen Kreisen …" : "In allen Kreisen suchen"}</button>` : ""}
       ${cands}
       ${job.candidates.length ? `<label class="check"><input type="radio" name="m-${job.key}" value="" ${job.match ? "" : "checked"}> <span>Keiner davon – eigene Angaben</span></label>` : ""}
     </div>
@@ -411,6 +456,8 @@ function renderQueue() {
     renderQueue();
   }));
   el.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = () => keepJob(b.dataset.keep, b)));
+  el.querySelectorAll("[data-everywhere]").forEach((b) => (b.onclick = () =>
+    searchEverywhere(state.queue.find((j) => j.key === b.dataset.everywhere))));
 }
 
 // Adresse -> Koordinaten (und Kreis) über OpenStreetMap-Nominatim, nur bei eigenen Angaben

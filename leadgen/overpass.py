@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from .categories import CATEGORIES, classify
+from .categories import CATEGORIES, classify, fix_category, operator_type, osm_kind
 from .regions import get_kreis
 
 ENDPOINTS = [
@@ -39,8 +39,9 @@ def build_query(ags, category_ids, newer_than=None):
     newer = f'(newer:"{newer_than}")' if newer_than else ""
     parts = []
     for cid in category_ids:
-        for key, pattern in CATEGORIES[cid]["filters"]:
-            parts.append(f'nwr["{key}"~"{pattern}"]["name"]{newer}(area.kreis);')
+        for key, pattern, *extra in CATEGORIES[cid]["filters"]:
+            more = "".join(f'["{k}"~"{p}"]' for k, p in (extra[0] if extra else {}).items())
+            parts.append(f'nwr["{key}"~"{pattern}"]{more}["name"]{newer}(area.kreis);')
     return (
         f"[out:json][timeout:{TIMEOUT}];"
         + _area_statement(kreis)
@@ -98,13 +99,12 @@ def element_to_lead(el, ags):
         return None
     lat = el.get("lat") or el.get("center", {}).get("lat")
     lon = el.get("lon") or el.get("center", {}).get("lon")
-    kind = tags.get("shop") or tags.get("amenity") or tags.get("craft") or tags.get("office") \
-        or tags.get("leisure") or tags.get("tourism") or tags.get("healthcare") or ""
     return {
         "id": f"osm:{el['type']}/{el['id']}",
         "name": tags["name"],
-        "category": category,
-        "kind": kind,
+        "category": fix_category(category, tags["name"]),
+        "kind": osm_kind(tags),
+        "operator_type": operator_type(tags),
         "kreis": ags,
         "address": _address(tags),
         "city": tags.get("addr:city", ""),

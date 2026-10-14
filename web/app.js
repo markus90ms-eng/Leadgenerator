@@ -27,7 +27,12 @@ const STATUS_LABELS = {
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
-const catName = (id) => state.meta.categories.find((c) => c.id === id)?.name || id || "–";
+// Namen der alten Branchen-Einteilung (für ältere Einträge in Pipeline/Sicherungen)
+const OLD_CATS = { gastro: "Gastronomie", einzelhandel: "Einzelhandel", lebensmittel: "Lebensmittel & Getränke",
+  beauty: "Beauty & Wellness", immobilien: "Immobilien", baumarkt: "Bau, Garten & Heimwerk", freizeit: "Freizeit & Entertainment",
+  bildung: "Bildung", finanzen: "Banken & Versicherungen", dienstleister: "Firmen, Agenturen & IT",
+  gesundheit: "Gesundheit", recht: "Rechts- & Steuerberatung" };
+const catName = (id) => state.meta.categories.find((c) => c.id === id)?.name || OLD_CATS[id] || id || "–";
 const kreisName = (ags) => state.meta.kreise.find((k) => k.ags === ags)?.name || ags || "";
 const fmtDate = (iso) => (iso ? iso.split("-").reverse().join(".") : "");
 
@@ -69,17 +74,33 @@ function score(l, reason, near) {
   if (l.hours) parts.push([5, "Aktiv (Öffnungszeiten)"]);
   if (near?.count) parts.push([10, "Ströer-Fläche im Umkreis"]);
   if (l.chain) parts.push([-25, "Kette/Filiale (zentrales Marketing)"]);
+  if (l.ws?.jobs || l.ws?.kar) parts.push([5, "sucht Personal"]);
+  if (l.pt === "privat") parts.push([10, "Privater Träger"]);
+  if (l.pt === "öffentlich") parts.push([-5, "Öffentlicher Träger"]);
   const total = Math.max(0, Math.min(100, parts.reduce((s, [p]) => s + p, 0)));
   return [total, parts.map(([p, why]) => `${why} ${p > 0 ? "+" : ""}${p}`)];
 }
 
+// Marken, hinter denen meist selbstständige Kaufleute stehen (Verbund statt Filialkette)
+const VERBUND = /\b(edeka|e-?center|marktkauf|rewe|nahkauf|nah\s*(?:&|und)\s*gut|intersport|sport\s*2000|expert|euronics|ep:|electronicpartner|hagebau(?:markt)?|raiffeisen|vedes|spielwaren\s*(?:&|und)|budni|team\s*energie|kodi)\b/i;
+const isVerbund = (l) => VERBUND.test(`${l.brand || ""} ${l.name || ""}`);
+
+// Pipeline-Eintrag eines Betriebs – bei Gruppen gilt der Eintrag der ganzen Gruppe
+const pipeKey = (l) => (l.grp ? "grp:" + l.grp : l.id);
+const pipeEntry = (l) => (l.grp && state.pipeline["grp:" + l.grp]) || state.pipeline[l.id];
+
 function enrich(l, since) {
+  // Verbund-Märkte: gemeinsame Website (z. B. edeka.de) sagt nichts über eigene Standorte
+  if (l.chain && isVerbund(l)) l = { ...l, chain: 0, verbund: 1, st: undefined, grp: undefined };
   const reason = newReason(l, since);
-  const p = state.pipeline[l.id];
+  const p = pipeEntry(l);
   const kreis = l.kreis || p?.lead?.kreis;
   const near = nearby(l, kreis);
   const [s, reasons] = score(l, reason, near);
+  const size = sizeClass(l);
+  const am = ampel(l, reason, size);
   return { ...l, kreis, new_reason: reason, score: s, score_reasons: reasons, near, near_count: near?.count || 0,
+    size: size.cls, size_rank: size.rank, size_why: size.why, ampel: am.color, ampel_pts: am.pts, ampel_why: am.why,
     status: p?.status || "neu", notes: p?.notes || "" };
 }
 
@@ -201,12 +222,15 @@ function pitchPrompt(l) {
     : `keine Ströer-Fläche im Umkreis von ${$("#radius").selectedOptions[0].text}`;
   const facts = [
     `Firma: ${l.name}`,
-    `Branche: ${catName(l.category)}${l.kind ? ` (${l.kind})` : ""}`,
+    `Branche: ${catName(l.category)}${l.kind && l.kind !== catName(l.category) ? ` (${l.kind})` : ""}`,
     l.address ? `Adresse: ${l.address}` : `Ort: ${stadt}`,
     `Website: ${l.website || "keine bekannt – bitte im Web nach der Firma suchen"}`,
     l.phone ? `Telefon: ${l.phone}` : "",
     `Ströer-Flächen in der Nähe: ${flaechen}`,
     l.photo ? `Gesehen: eigene Beobachtung (Werbung auf Fahrzeug/Schild)${l.ocr ? ` – Text auf dem Foto: „${l.ocr.replace(/\s+/g, " ").slice(0, 300)}“` : ""}` : "",
+    signalText(l) ? `Signale: ${signalText(l)}` : "",
+    pipeEntry(l)?.contact?.name ? `Ansprechpartner: ${pipeEntry(l).contact.anrede || ""} ${pipeEntry(l).contact.name}`.replace("  ", " ") : "",
+    l.grp ? `Gruppe: gehört zu „${l.gn || l.grp}“ mit ${l.st} Standorten in ${l.go} Orten (gleiche Website) – Werbung wird vermutlich zentral entschieden, der Pitch sollte die Gruppe ansprechen` : "",
     l.new_reason ? `Besonderheit: ${l.new_reason}${l.start_date ? " (" + fmtDate(l.start_date) + ")" : ""}` : "",
   ].filter(Boolean).join("\n");
   return `Du bist mein Vertriebsassistent. Ich bin Markus Schultheiß, Ströer AG, und rufe gleich bei folgendem Unternehmen an:
@@ -264,6 +288,7 @@ function focusOnMap(l) {
 async function init() {
   state.pipeline = load("pipeline", {});
   initEigene();
+  initMail();
   try {
     state.meta = await getJson("data/meta.json");
   } catch (err) {
@@ -282,9 +307,7 @@ async function init() {
   }
   kreisSel.value = load("kreis", "08111");
 
-  const savedCats = load("cats", state.meta.categories.filter((c) => c.weight >= 28).map((c) => c.id));
-  $("#cats").innerHTML = state.meta.categories.map((c) =>
-    `<label><input type="checkbox" value="${c.id}" ${savedCats.includes(c.id) ? "checked" : ""}> ${esc(c.name)}</label>`).join("");
+  renderCats(true);
   $("#topics").innerHTML = Object.values(state.meta.topics).map((name) =>
     `<label><input type="checkbox" value="${esc(name)}" checked> ${esc(name)}</label>`).join("");
   for (const s of STATUSES) $("#status-filter").append(new Option(STATUS_LABELS[s], s));
@@ -297,10 +320,27 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#cats"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
-  $("#cats").addEventListener("change", () => store("cats", selectedCats()));
+  $("#cats").addEventListener("change", catsChanged);
+  $("#cats").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-toggle]");
+    if (!t) return;
+    e.preventDefault();
+    const open = new Set(load("openGroups", []));
+    open.has(t.dataset.toggle) ? open.delete(t.dataset.toggle) : open.add(t.dataset.toggle);
+    store("openGroups", [...open]);
+    renderCats();
+  });
+  $("#show-unsure").checked = load("showUnsure", false);
+  $("#show-unsure").onchange = async () => {
+    store("showUnsure", $("#show-unsure").checked);
+    state.limit = 200;
+    if ($("#show-unsure").checked) await loadUnsure($("#kreis").value);
+    renderCats();
+    render();
+  };
   kreisSel.onchange = () => { store("kreis", kreisSel.value); state.focus = null; loadKreis(); };
   $("#radius").value = load("radius", "500");
   $("#radius").onchange = () => { store("radius", $("#radius").value); render(); };
@@ -314,16 +354,75 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["search", "new", "news", "pipeline", "eigene", "salesforce"].includes(startTab) ? startTab : "search");
+  switchTab(["eigene", "search", "new", "news", "pipeline", "salesforce"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
 function setAllCats(on) {
-  document.querySelectorAll("#cats input").forEach((i) => (i.checked = on));
+  document.querySelectorAll("#cats input[value]").forEach((i) => (i.checked = on));
+  catsChanged();
+}
+const selectedCats = () => [...document.querySelectorAll("#cats input[value]:checked")].map((i) => i.value);
+
+// Branchenbaum: Hauptbranche (aufklappbar) -> Unterbranchen, jeweils mit Anzahl im Kreis
+function defaultCats() {
+  return state.meta.categories.filter((c) => c.weight >= 26).map((c) => c.id);
+}
+function renderCats(initial = false) {
+  const valid = new Set(state.meta.categories.map((c) => c.id));
+  let chosen = initial ? load("cats", null) : selectedCats();
+  if (!chosen || chosen.some((id) => !valid.has(id))) chosen = defaultCats(); // alte Branchen-Einteilung
+  chosen = new Set(chosen);
+  const counts = {};
+  const data = state.kreisData[$("#kreis").value];
+  for (const l of [...(data?.leads || []), ...(showUnsure() ? data?.unsure || [] : [])]) counts[l.category] = (counts[l.category] || 0) + 1;
+  const open = new Set(load("openGroups", []));
+  const groups = state.meta.groups || [{ id: "", name: "Alle Branchen" }];
+  $("#cats").innerHTML = groups.map((g) => {
+    const cats = state.meta.categories.filter((c) => (c.group || "") === g.id);
+    const total = cats.reduce((n, c) => n + (counts[c.id] || 0), 0);
+    const on = cats.filter((c) => chosen.has(c.id)).length;
+    return `<div class="cat-group">
+      <div class="cat-head">
+        <input type="checkbox" data-group="${g.id}" ${on === cats.length ? "checked" : ""} ${on && on < cats.length ? 'data-mixed="1"' : ""} aria-label="${esc(g.name)}">
+        <a href="#" data-toggle="${g.id}" aria-expanded="${open.has(g.id)}">${open.has(g.id) ? "▾" : "▸"} ${esc(g.name)}</a>
+        <span class="count">${data ? total : ""}</span>
+      </div>
+      <div class="cat-subs" ${open.has(g.id) ? "" : "hidden"}>${cats.map((c) =>
+        `<label><input type="checkbox" value="${c.id}" ${chosen.has(c.id) ? "checked" : ""}> ${esc(c.name)}
+          <span class="count">${data ? counts[c.id] || 0 : ""}</span></label>`).join("")}</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#cats [data-mixed]").forEach((i) => (i.indeterminate = true));
+  if (initial) store("cats", [...chosen]);
+}
+function catsChanged(e) {
+  const g = e?.target?.dataset?.group;
+  if (g !== undefined) {
+    const ids = new Set(state.meta.categories.filter((c) => (c.group || "") === g).map((c) => c.id));
+    document.querySelectorAll("#cats input[value]").forEach((i) => { if (ids.has(i.value)) i.checked = e.target.checked; });
+  }
   store("cats", selectedCats());
+  renderCats();
+  state.limit = 200;
   render();
 }
-const selectedCats = () => [...document.querySelectorAll("#cats input:checked")].map((i) => i.value);
+const showUnsure = () => $("#show-unsure")?.checked;
+
+async function loadUnsure(ags) {
+  const data = state.kreisData[ags];
+  if (!data || data.unsure) return;
+  message(`Lade unsichere Einträge für ${kreisName(ags)} …`, true);
+  try {
+    const extra = await getJson(`data/kreis/${ags}-unsicher.json`);
+    for (const l of extra.leads) l.kreis = ags;
+    data.unsure = extra.leads;
+    message("");
+  } catch (_) {
+    data.unsure = [];
+    message("");
+  }
+}
 const selectedTopics = () => [...document.querySelectorAll("#topics input:checked")].map((i) => i.value);
 
 function switchTab(tab) {
@@ -347,8 +446,12 @@ function switchTab(tab) {
 async function loadKreis() {
   const ags = $("#kreis").value;
   const info = state.meta.status?.[ags];
-  $("#stand").textContent = info?.updated ? `Datenstand: ${fmtDate(info.updated)} · ${info.count} Betriebe` : "";
-  if (state.kreisData[ags]) { renderMediaFilter(); return render(); }
+  $("#stand").textContent = info?.updated ? `Datenstand: ${fmtDate(info.updated)} · ${info.count} Betriebe`
+    + (info.unsure ? ` (+ ${info.unsure} unsichere)` : "") : "";
+  if (state.kreisData[ags]) {
+    if (showUnsure()) await loadUnsure(ags);
+    renderMediaFilter(); renderCats(); return render();
+  }
   if (!info?.count) {
     $("#results").innerHTML = "";
     $("#summary").textContent = "";
@@ -367,10 +470,11 @@ async function loadKreis() {
     state.stroeerData[ags] = stroeerFeed;
     state.nearIndex = null;
     message("");
+    if (showUnsure()) await loadUnsure(ags);
   } catch (err) {
     message(err.message);
   }
-  if ($("#kreis").value === ags) { renderMediaFilter(); render(); }
+  if ($("#kreis").value === ags) { renderMediaFilter(); renderCats(); render(); }
 }
 
 function message(text, loading = false) {
@@ -391,7 +495,7 @@ function currentRows() {
   const since = monthsAgo(state.tab === "new" ? +$("#months").value : 12);
   const cats = new Set(selectedCats());
   const rows = [];
-  for (const l of data.leads) {
+  for (const l of showUnsure() ? [...data.leads, ...(data.unsure || [])] : data.leads) {
     if (!cats.has(l.category)) continue;
     if (state.tab === "new" && !newReason(l, since)) continue;
     rows.push(enrich(l, since));
@@ -409,14 +513,18 @@ function filtered(rows) {
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
     (state.tab !== "pipeline" || !status || l.status === status) &&
     (!$("#only-near").checked || l.near_count > 0) &&
+    (!$("#size-filter").value || l.size_rank >= ($("#size-filter").value === "L" ? 3 : 2)) &&
+    (!$("#only-green").checked || l.ampel === "g") &&
+    (!$("#hiring").checked || l.ws?.jobs || l.ws?.kar) &&
     sfcMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
   const { key, dir } = state.sort;
-  return out.sort((a, b) => {
+  out.sort((a, b) => {
     const x = a[key] ?? "", y = b[key] ?? "";
     return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "de")) * dir;
   });
+  return state.tab !== "pipeline" && $("#group-collapse")?.checked ? collapseGroups(out) : out;
 }
 
 function render() {
@@ -446,19 +554,20 @@ function render() {
   }
 
   const cols = [
-    ["score", "Score"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
+    ["score", "Score"], ["ampel_pts", "Ampel"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
     [null, "Kontakt"], ["near_count", "Ströer im Umkreis"], ["status", "Status"], [null, "Notiz"], [null, ""],
   ];
   const head = cols.map(([k, label]) =>
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
   const body = rows.slice(0, state.limit).map((l) =>
-    rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")).join("");
+    rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")
+    + (l.grp && state.openGroup === l.id ? groupDetailHtml(l, cols.length) : "")).join("");
   $("#results").innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
     ${rows.length > state.limit ? `<div class="more"><button id="more">Weitere ${Math.min(200, rows.length - state.limit)} anzeigen</button></div>` : ""}</div>`;
 
   document.querySelectorAll("th[data-sort]").forEach((th) => (th.onclick = () => {
     const k = th.dataset.sort;
-    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "score" || k === "near_count" ? -1 : 1) };
+    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (["score", "near_count", "ampel_pts"].includes(k) ? -1 : 1) };
     render();
   }));
   $("#more")?.addEventListener("click", () => { state.limit += 200; render(); });
@@ -471,10 +580,19 @@ function render() {
   }));
   document.querySelectorAll("button[data-del]").forEach((b) => (b.onclick = () => deleteOwn(b.dataset.del)));
   document.querySelectorAll("button[data-pitch]").forEach((b) => (b.onclick = () => openPitch(byId[b.dataset.pitch])));
+  document.querySelectorAll("button[data-grp]").forEach((b) => (b.onclick = () => toggleGroup(byId[b.dataset.grp])));
+  document.querySelectorAll("[data-mail]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); openMail(byId[b.dataset.mail]); }));
   document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
   document.querySelectorAll("textarea[data-id]").forEach((t) => (t.onchange = () => save(byId[t.dataset.id], { notes: t.value })));
   updateMap(rows);
+}
+
+// "07031720996" -> "07031 720996" (Vorwahlen auf 1 wie 0711/0621 sind kürzer)
+function fmtPhone(p) {
+  if (!/^0\d{6,}$/.test(p)) return p;
+  const n = /^0[1-9]\d1/.test(p) && !/^01[5-7]/.test(p) ? 4 : /^01[5-7]/.test(p) ? 4 : 5;
+  return p.slice(0, n) + " " + p.slice(n);
 }
 
 function rowHtml(l) {
@@ -483,12 +601,16 @@ function rowHtml(l) {
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
     l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
     l.chain ? `<span class="badge chain">Kette${l.brand ? ": " + esc(l.brand) : ""}</span>` : "",
+    l.verbund ? `<span class="badge pt" title="Marke eines Händlerverbunds – die Märkte werden oft von selbstständigen Kaufleuten geführt, die selbst über Werbung entscheiden">Verbund: oft selbstständig</span>` : "",
+    l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
+    l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
     sfcBadge(l),
+    groupBadge(l),
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
-    l.phone ? `<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ""))}">☎ ${esc(l.phone)}</a>` : "",
-    l.email ? `<a href="mailto:${esc(l.email)}">✉ ${esc(l.email)}</a>` : "",
+    l.phone ? `<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ""))}">☎ ${esc(fmtPhone(l.phone))}</a>` : "",
+    l.email ? `<a href="mailto:${esc(l.email)}" data-mail="${esc(l.id)}" title="Mail mit Vorlage in Outlook verfassen">✉ ${esc(l.email)}</a>` : "",
     site ? `<a href="${esc(site)}" target="_blank" rel="noopener">🌐 ${esc(l.website.replace(/^https?:\/\/(www\.)?/, ""))}</a>` : "",
   ].join("") || `<span class="sub">–</span>`;
   const statusOpts = STATUSES.map((s) => `<option value="${s}" ${l.status === s ? "selected" : ""}>${STATUS_LABELS[s]}</option>`).join("");
@@ -497,6 +619,7 @@ function rowHtml(l) {
   const osm = osmId.startsWith("osm:") ? `https://www.openstreetmap.org/${osmId.slice(4)}` : "";
   return `<tr>
     <td><span class="score ${scoreCls}" title="${esc(l.score_reasons.join("\n"))}">${l.score}</span></td>
+    <td>${ampelHtml(l)}</td>
     <td class="name">${l.photo ? `<img class="thumb" src="${l.photo}" alt="">` : ""}${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
     <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
@@ -508,20 +631,25 @@ function rowHtml(l) {
     <td><textarea data-id="${esc(l.id)}" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
     <td class="contact">
       <button class="pitch-btn" data-pitch="${esc(l.id)}" title="Individuellen Telefonpitch mit Claude erstellen">Pitch</button>
+      <button class="pitch-btn mail-btn" data-mail="${esc(l.id)}" title="Mail mit Vorlage in Outlook verfassen">Mail</button>
       <a href="${google}" target="_blank" rel="noopener">Google</a>
       ${osm ? `<a href="${osm}" target="_blank" rel="noopener">Karte</a>` : ""}
       ${l.source_link ? `<a href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}
+      ${lookupLinks(l)}
       ${state.tab === "eigene" ? `<button class="del-btn" data-del="${esc(l.id)}" title="Eigenen Lead löschen">Löschen</button>` : ""}
     </td>
   </tr>`;
 }
 
 function save(lead, patch) {
-  const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, ...raw } = lead;
-  const entry = state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
+  const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, verbund,
+    size, size_rank, size_why, ampel: _a, ampel_pts, ampel_why, ...raw } = lead;
+  const key = pipeKey(lead);
+  const entry = state.pipeline[key] || state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
+  if (key !== lead.id) delete state.pipeline[lead.id]; // älterer Einzel-Eintrag geht in der Gruppe auf
   Object.assign(entry, patch, { updated: new Date().toISOString() });
-  if (entry.status === "neu" && !entry.notes) delete state.pipeline[lead.id];
-  else state.pipeline[lead.id] = entry;
+  if (entry.status === "neu" && !entry.notes && !entry.contact) delete state.pipeline[key];
+  else state.pipeline[key] = entry;
   store("pipeline", state.pipeline);
   if (state.tab === "pipeline" || state.tab === "eigene") render();
 }
@@ -640,8 +768,11 @@ function exportCsv() {
     ["Ströer-Flächen im Umkreis", (l) => l.near?.count ?? ""],
     ["Nächste Ströer-Fläche (m)", (l) => l.near?.nearest?.dist ?? ""],
     ["Nächste Ströer-Fläche", (l) => l.near?.nearest ? `${mediaName(l.near.nearest.typ)}: ${l.near.nearest.standort} (SDAW ${l.near.nearest.id})` : ""],
+    ["Träger", "pt"], ["Unsicher", (l) => (l.u ? "ja" : "")],
+    ["Größe (geschätzt)", "size"], ["Ampel", (l) => AMPEL_LABEL[l.ampel]], ["Signale", (l) => signalText(l)],
+    ["Rechtsform", (l) => l.ws?.rf || l.rf || ""], ["Offene Stellen", (l) => l.ws?.jobs || ""],
     ["Quelle", (l) => l.source_link || (l.photo ? "Eigenes Foto " + fmtDate(l.created) : "") ||
-      (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : "")],
+      (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : l.id.startsWith("ov:") ? "Overture Maps" : "")],
   ];
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [fields.map(([h]) => cell(h)).join(";")].concat(
