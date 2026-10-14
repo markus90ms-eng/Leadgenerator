@@ -186,7 +186,7 @@ def check(url, today, fetcher=None):
     return out
 
 
-def run(targets, cache, today, max_count=8000, max_seconds=1200, workers=24, fetcher=None, log=print):
+def run(targets, cache, today, max_count=8000, max_seconds=1200, workers=48, fetcher=None, log=print):
     """Prüft bis zu max_count Domains aus `targets` ([(domain, url)], nach Priorität) und
     trägt die Ergebnisse in `cache` ein. Gibt die Anzahl geprüfter Domains zurück."""
     todo = targets[:max_count]

@@ -414,8 +414,8 @@ def main(argv=None):
     parser.add_argument("--previous", default="", help="URL der bisher veröffentlichten Seite")
     parser.add_argument("--skip-stroeer", action="store_true", help="Ströer-Standorte nicht neu abrufen")
     parser.add_argument("--skip-overture", action="store_true", help="Overture-Betriebe nicht neu abrufen")
-    parser.add_argument("--webcheck-max", type=int, default=8000, help="höchstens so viele Websites pro Lauf prüfen")
-    parser.add_argument("--webcheck-minutes", type=float, default=20, help="Zeitlimit für den Website-Check")
+    parser.add_argument("--webcheck-max", type=int, default=15000, help="höchstens so viele Websites pro Lauf prüfen")
+    parser.add_argument("--webcheck-minutes", type=float, default=25, help="Zeitlimit für den Website-Check")
     args = parser.parse_args(argv)
 
     shutil.rmtree(args.out, ignore_errors=True)
