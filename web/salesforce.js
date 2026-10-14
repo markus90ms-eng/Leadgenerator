@@ -80,15 +80,18 @@ async function sfStart(path) {
   }
 }
 
-// Erst nach dem vollständigen Laden verdrahten: "$" wird erst in app.js definiert, das nach dieser Datei lädt.
-function sfInit() {
-  $("#sf-run").onclick = () => sfStart("/run");
-  $("#sf-login").onclick = () => sfStart("/login");
-  for (const id of ["#sf-text", "#sf-idle", "#sf-booked", "#sf-lastbook", "#sf-minrev", "#sf-owner", "#sf-branche", "#sf-minscore"]) {
-    $(id).addEventListener("input", () => { sf.limit = 300; $("#sf-minscore-val").textContent = $("#sf-minscore").value; render(); });
-  }
-}
-window.addEventListener("load", sfInit);
+// Klicks und Filter über das ganze Dokument abfangen: funktioniert unabhängig von der Lade-Reihenfolge der Skripte.
+const SF_VERSION = "4";
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#sf-run")) sfStart("/run");
+  else if (e.target.closest("#sf-login")) sfStart("/login");
+});
+document.addEventListener("input", (e) => {
+  if (!e.target.closest("#sf-filters")) return;
+  sf.limit = 300;
+  $("#sf-minscore-val").textContent = $("#sf-minscore").value;
+  render();
+});
 
 const sfMonthsAgo = (m) => { const d = new Date(); d.setMonth(d.getMonth() - m); return d.toISOString().slice(0, 10); };
 const sfDaysSince = (iso) => (iso && iso !== "nie" ? Math.floor((Date.now() - new Date(iso)) / 864e5) : null);
