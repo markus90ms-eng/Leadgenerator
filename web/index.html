@@ -34,10 +34,13 @@
     </section>
 
     <section class="only-salesforce">
+      <label for="sf-liste">Listenansicht (ID oder Name)</label>
+      <input type="search" id="sf-liste" placeholder="leer = Alle Accounts, z. B. 00B5g00000AbCdE">
+      <label class="check"><input type="checkbox" id="sf-headed"> Browser sichtbar (zur Fehlersuche)</label>
       <button class="primary" id="sf-run">Liste erstellen</button>
       <button id="sf-login" hidden style="width:100%;margin-top:8px">Bei Salesforce einloggen</button>
       <div class="stand" id="sf-info"></div>
-      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 4</span></p>
+      <p class="hint">Holt alle Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…) aus Salesforce. Die Daten kommen von deinem Rechner („Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen. <span id="sf-version">Seitenversion 6</span></p>
     </section>
 
     <section class="only-salesforce" id="sf-filters">

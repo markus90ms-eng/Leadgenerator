@@ -81,9 +81,17 @@ async function sfStart(path) {
 }
 
 // Klicks und Filter über das ganze Dokument abfangen: funktioniert unabhängig von der Lade-Reihenfolge der Skripte.
-const SF_VERSION = "4";
+const SF_VERSION = "6";
+try { const saved = localStorage.getItem("sf-liste"); if (saved) window.addEventListener("load", () => { $("#sf-liste").value = saved; }); } catch (_) {}
 document.addEventListener("click", (e) => {
-  if (e.target.closest("#sf-run")) sfStart("/run");
+  if (e.target.closest("#sf-run")) {
+    const liste = ($("#sf-liste").value || "").trim();
+    try { localStorage.setItem("sf-liste", liste); } catch (_) {}
+    const params = [];
+    if (liste) params.push("liste=" + encodeURIComponent(liste));
+    if ($("#sf-headed") && $("#sf-headed").checked) params.push("headed=1");
+    sfStart("/run" + (params.length ? "?" + params.join("&") : ""));
+  }
   else if (e.target.closest("#sf-login")) sfStart("/login");
 });
 document.addEventListener("input", (e) => {
