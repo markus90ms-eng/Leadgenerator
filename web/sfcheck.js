@@ -5,6 +5,16 @@
 const SFC_API = "http://127.0.0.1:8766";
 const sfc = { results: {}, running: false };
 try { sfc.results = JSON.parse(localStorage.getItem("leadgen:sfcheck") || "{}"); } catch (_) {}
+function sfcSyncVersion(v) {
+  // Neue Programmversion -> alte gemerkte Ergebnisse verwerfen (sie stammen evtl. von einer älteren Suche)
+  if (!v) return false;
+  let old = "";
+  try { old = localStorage.getItem("leadgen:sfcver") || ""; localStorage.setItem("leadgen:sfcver", v); } catch (_) {}
+  if (old === v) return false;
+  sfc.results = {};
+  sfcSave();
+  return true;
+}
 const sfcSave = () => { try { localStorage.setItem("leadgen:sfcheck", JSON.stringify(sfc.results)); } catch (_) {} };
 
 async function sfcCall(path, method = "GET", body) {
@@ -56,8 +66,9 @@ function sfcMatches(l) {
 
 async function sfcRun() {
   if (sfc.running) return;
-  const rows = (state.visible || []).filter((l) => !sfc.results[l.id] || sfc.results[l.id].status === "fehler").slice(0, 40);
-  if (!rows.length) return message("Keine ungeprüften Betriebe in der aktuellen Ansicht.");
+  const force = !!($("#sfc-force") && $("#sfc-force").checked);
+  const rows = (state.visible || []).filter((l) => force || !sfc.results[l.id] || sfc.results[l.id].status === "fehler").slice(0, 40);
+  if (!rows.length) return message("Alle Betriebe in dieser Ansicht sind schon geprüft. Auf der Abgleich-Seite „Auch bereits geprüfte erneut prüfen“ anhaken oder die Ergebnisse löschen.");
   const leads = rows.map((l) => ({ id: l.id, name: l.name, phone: l.phone || "", plz: ((l.address || "").match(/\b\d{5}\b/) || [""])[0] }));
   sfc.running = true;
   $("#sfc-run").disabled = true;
@@ -75,6 +86,7 @@ async function sfcRun() {
 async function sfcPoll() {
   for (;;) {
     const s = await sfcCall("/status");
+    sfcSyncVersion(s.version);
     Object.assign(sfc.results, await sfcCall("/checks"));
     sfcSave();
     if (s.state === "running") {
