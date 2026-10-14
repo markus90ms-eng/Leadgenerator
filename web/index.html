@@ -17,6 +17,7 @@
     <button data-tab="news">News-Radar</button>
     <button data-tab="eigene">Eigene Leads</button>
     <button data-tab="pipeline">Meine Pipeline</button>
+    <button data-tab="salesforce">Salesforce</button>
   </nav>
 </header>
 
@@ -30,6 +31,22 @@
       </label>
       <input type="file" id="photo-input" accept="image/*" multiple hidden>
       <p class="hint">Die Texterkennung läuft direkt in deinem Browser. Telefonnummer, Website und Firmenname werden mit allen Betrieben in Baden-Württemberg abgeglichen. Die Fotos bleiben auf deinem Gerät.</p>
+    </section>
+
+    <section class="only-salesforce">
+      <label for="sf-days">Keine Aktivität seit</label>
+      <select id="sf-days">
+        <option value="30">1 Monat</option>
+        <option value="60">2 Monaten</option>
+        <option value="90" selected>3 Monaten</option>
+        <option value="180">6 Monaten</option>
+        <option value="365">12 Monaten</option>
+      </select>
+      <p class="hint">Firmen in Baden-Württemberg (PLZ 7…, 88…, 89…).</p>
+      <button class="primary" id="sf-run">Liste erstellen</button>
+      <button id="sf-login" hidden style="width:100%;margin-top:8px">Bei Salesforce einloggen</button>
+      <div class="stand" id="sf-info"></div>
+      <p class="hint">Die Daten kommen von deinem Rechner (Programm „Salesforce_starten.bat“ muss laufen) und werden nie ins Internet hochgeladen.</p>
     </section>
 
     <section class="only-search only-new only-news">
@@ -124,6 +141,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="eigene.js"></script>
+<script src="salesforce.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

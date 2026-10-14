@@ -314,7 +314,7 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["search", "new", "news", "pipeline", "eigene"].includes(startTab) ? startTab : "search");
+  switchTab(["search", "new", "news", "pipeline", "eigene", "salesforce"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
@@ -336,7 +336,8 @@ function switchTab(tab) {
     el.hidden = !el.classList.contains("only-" + tab);
   });
   $("#export").hidden = tab === "news";
-  $("#toggle-map").hidden = tab === "news";
+  $("#toggle-map").hidden = tab === "news" || tab === "salesforce";
+  if (tab === "salesforce") $("#map").hidden = true;
   renderQueue();
   render();
   if (tab === "eigene") ensureOwnKreise().then(() => state.tab === "eigene" && render());
@@ -419,6 +420,7 @@ function filtered(rows) {
 function render() {
   if (!state.meta) return;
   if (state.tab === "news") return renderNews();
+  if (state.tab === "salesforce") return renderSalesforce();
   const all = currentRows();
   const rows = filtered(all);
   state.visible = rows;
@@ -624,6 +626,7 @@ function download(name, content, type) {
 }
 
 function exportCsv() {
+  if (state.tab === "salesforce") return exportSalesforce();
   const rows = state.visible || [];
   if (!rows.length) return message("Keine Daten zum Exportieren.");
   const fields = [

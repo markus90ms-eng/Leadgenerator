@@ -132,3 +132,11 @@ tr.near-detail td { background: #f7f9fc; padding: 0; }
 img.thumb { display: block; width: 72px; height: 54px; object-fit: cover; border-radius: 6px; margin-bottom: 4px; }
 .badge.foto { background: #e8f3f1; color: #0f6b5c; }
 .del-btn { display: block; margin-top: 4px; padding: 3px 8px; font-size: 12px; color: var(--bad); }
+
+.sf-empty { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+.sf-empty h3 { margin: 0 0 8px; }
+.sf-empty ol { padding-left: 20px; }
+.sf-log { background: #f4f5f7; padding: 10px; border-radius: 6px; max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
+.sf-warn, .warn { color: var(--warn); }
+.sf-warn { background: var(--warn-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
+.stand.warn { color: var(--warn); }
