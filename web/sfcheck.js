@@ -48,7 +48,7 @@ function sfcBadge(l, compact = false) {
     case "kunde": return `<span class="badge topic" title="${tip}">👤 Bestandskunde, nicht gesperrt${owner}</span>${act}${link}`;
     case "ruhend": return `<span class="badge topic" title="${tip}">⏳ Ex-Kunde / inaktiv, nicht gesperrt${owner}</span>${act}${link}`;
     case "vergeben": return `<span class="badge taken" title="${tip}">🔒 Gesperrt, nicht kontaktieren${owner}</span>${act}${link}`;
-    case "unklar": return `<span class="badge chain" title="${tip}">? Account gefunden, bitte prüfen${owner}</span>${act}${link}`;
+    case "unklar": return `<span class="badge chain" title="${tip}">? ${esc(m?.firmenstatus || "Account gefunden, bitte prüfen")}${owner}</span>${act}${link}`;
     default: return `<span class="badge chain" title="${tip}">⚠ Abgleich fehlgeschlagen</span>`;
   }
 }
