@@ -80,11 +80,15 @@ async function sfStart(path) {
   }
 }
 
-$("#sf-run").onclick = () => sfStart("/run");
-$("#sf-login").onclick = () => sfStart("/login");
-for (const id of ["#sf-text", "#sf-idle", "#sf-booked", "#sf-lastbook", "#sf-minrev", "#sf-owner", "#sf-branche", "#sf-minscore"]) {
-  $(id).addEventListener("input", () => { sf.limit = 300; $("#sf-minscore-val").textContent = $("#sf-minscore").value; render(); });
+// Erst nach dem vollständigen Laden verdrahten: "$" wird erst in app.js definiert, das nach dieser Datei lädt.
+function sfInit() {
+  $("#sf-run").onclick = () => sfStart("/run");
+  $("#sf-login").onclick = () => sfStart("/login");
+  for (const id of ["#sf-text", "#sf-idle", "#sf-booked", "#sf-lastbook", "#sf-minrev", "#sf-owner", "#sf-branche", "#sf-minscore"]) {
+    $(id).addEventListener("input", () => { sf.limit = 300; $("#sf-minscore-val").textContent = $("#sf-minscore").value; render(); });
+  }
 }
+window.addEventListener("load", sfInit);
 
 const sfMonthsAgo = (m) => { const d = new Date(); d.setMonth(d.getMonth() - m); return d.toISOString().slice(0, 10); };
 const sfDaysSince = (iso) => (iso && iso !== "nie" ? Math.floor((Date.now() - new Date(iso)) / 864e5) : null);
