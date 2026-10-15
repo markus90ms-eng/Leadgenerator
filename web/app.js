@@ -18,10 +18,10 @@ const state = {
   markers: null,
 };
 const $ = (sel) => document.querySelector(sel);
-const STATUSES = ["neu", "interessant", "kontaktiert", "termin", "angebot", "kunde", "kein_interesse"];
+const STATUSES = ["neu", "interessant", "kontaktiert", "termin", "angebot", "kunde", "kein_interesse", "kollege"];
 const STATUS_LABELS = {
   neu: "Neu", interessant: "Interessant", kontaktiert: "Kontaktiert", termin: "Termin",
-  angebot: "Angebot", kunde: "Kunde", kein_interesse: "Kein Interesse",
+  angebot: "Angebot", kunde: "Kunde", kein_interesse: "Kein Interesse", kollege: "Kollege dran",
 };
 
 function esc(value) {
@@ -322,7 +322,7 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse", "#web-filter", "#grp-filter", "#sitz-filter"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse", "#web-filter", "#grp-filter", "#sitz-filter", "#show-hidden"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
@@ -506,7 +506,10 @@ function message(text, loading = false) {
 function currentRows() {
   if (state.tab === "eigene") return Object.values(state.eigene).map((l) => enrich(l, monthsAgo(12)));
   if (state.tab === "pipeline") {
-    return Object.entries(state.pipeline).map(([id, p]) => enrich({ ...p.lead, id }, monthsAgo(12)));
+    // "Kollege dran" gehört nicht in die eigene Pipeline (außer man filtert gezielt danach)
+    const wantKollege = $("#status-filter").value === "kollege";
+    return Object.entries(state.pipeline).filter(([, p]) => (p.status === "kollege") === wantKollege)
+      .map(([id, p]) => enrich({ ...p.lead, id }, monthsAgo(12)));
   }
   const data = state.kreisData[$("#kreis").value];
   if (!data) return [];
@@ -537,6 +540,7 @@ function filtered(rows) {
     (!$("#web-filter").value || ($("#web-filter").value === "mit") === !!l.website) &&
     (!$("#grp-filter").value || ($("#grp-filter").value === "gruppe") === !!l.grp) &&
     sitzMatches(l, $("#sitz-filter").value) &&
+    ($("#show-hidden").checked || !isHidden(l)) &&
     sfcMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
@@ -545,7 +549,9 @@ function filtered(rows) {
     const x = a[key] ?? "", y = b[key] ?? "";
     return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "de")) * dir;
   });
-  return state.tab !== "pipeline" && $("#group-collapse")?.checked ? collapseGroups(out) : out;
+  // Accounts, an denen ein Kollege dran ist, rutschen ans Ende
+  const sorted = state.tab === "pipeline" ? out : [...out.filter((l) => l.status !== "kollege"), ...out.filter((l) => l.status === "kollege")];
+  return state.tab !== "pipeline" && $("#group-collapse")?.checked ? collapseGroups(sorted) : sorted;
 }
 
 function render() {
@@ -567,6 +573,7 @@ function render() {
   } else {
     $("#summary").innerHTML = all.length
       ? `<b>${rows.length}</b> von ${all.length} Betrieben` + (neu ? ` · <b>${neu}</b> neu am Markt` : "")
+        + (hiddenCount(all) && !$("#show-hidden").checked ? ` · ${hiddenCount(all)} ausgeblendet` : "")
       : state.kreisData[$("#kreis").value] ? "Keine Betriebe – Branchen oder Zeitraum anpassen." : "";
   }
   if (!rows.length) {
@@ -602,6 +609,7 @@ function render() {
   document.querySelectorAll("button[data-del]").forEach((b) => (b.onclick = () => deleteOwn(b.dataset.del)));
   document.querySelectorAll("button[data-pitch]").forEach((b) => (b.onclick = () => openPitch(byId[b.dataset.pitch])));
   document.querySelectorAll("button[data-grp]").forEach((b) => (b.onclick = () => toggleGroup(byId[b.dataset.grp])));
+  document.querySelectorAll("button[data-hide]").forEach((b) => (b.onclick = () => toggleHidden(byId[b.dataset.hide])));
   document.querySelectorAll("[data-mail]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); openMail(byId[b.dataset.mail]); }));
   document.querySelectorAll("button[data-focus]").forEach((b) => (b.onclick = () => focusOnMap(byId[b.dataset.focus])));
   document.querySelectorAll("select[data-id]").forEach((s) => (s.onchange = () => save(byId[s.dataset.id], { status: s.value })));
@@ -658,6 +666,7 @@ function rowHtml(l) {
       ${osm ? `<a href="${osm}" target="_blank" rel="noopener">Karte</a>` : ""}
       ${l.source_link ? `<a href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}
       ${lookupLinks(l)}
+      <button class="hide-btn" data-hide="${esc(l.id)}" title="${isHidden(l) ? "Wieder einblenden" : l.grp ? "Ganze Gruppe ausblenden" : "Betrieb ausblenden"}">${isHidden(l) ? "Einblenden" : l.grp ? "Gruppe ausblenden" : "Ausblenden"}</button>
       ${state.tab === "eigene" ? `<button class="del-btn" data-del="${esc(l.id)}" title="Eigenen Lead löschen">Löschen</button>` : ""}
     </td>
   </tr>`;
@@ -669,11 +678,13 @@ function save(lead, patch) {
   const key = pipeKey(lead);
   const entry = state.pipeline[key] || state.pipeline[lead.id] || { status: "neu", notes: "", lead: raw };
   if (key !== lead.id) delete state.pipeline[lead.id]; // älterer Einzel-Eintrag geht in der Gruppe auf
+  const before = entry.status;
   Object.assign(entry, patch, { updated: new Date().toISOString() });
   if (entry.status === "neu" && !entry.notes && !entry.contact) delete state.pipeline[key];
   else state.pipeline[key] = entry;
   store("pipeline", state.pipeline);
-  if (state.tab === "pipeline" || state.tab === "eigene") render();
+  // "Kollege dran" sortiert die Liste um (Eintrag rutscht nach unten bzw. zurück)
+  if (state.tab === "pipeline" || state.tab === "eigene" || before === "kollege" || entry.status === "kollege") render();
 }
 
 function renderNews() {
@@ -807,7 +818,7 @@ function exportCsv() {
 
 function saveBackup() {
   download(`leadgenerator_sicherung_${new Date().toISOString().slice(0, 10)}.json`,
-    JSON.stringify({ version: 1, pipeline: state.pipeline, eigene: state.eigene }, null, 1), "application/json");
+    JSON.stringify({ version: 1, pipeline: state.pipeline, eigene: state.eigene, hidden: load("hidden", null) }, null, 1), "application/json");
 }
 
 async function loadBackup(e) {
@@ -819,6 +830,12 @@ async function loadBackup(e) {
     Object.assign(state.pipeline, data.pipeline);
     store("pipeline", state.pipeline);
     Object.assign(state.eigene, data.eigene || {});
+    if (data.hidden) {
+      const h = hiddenSets();
+      data.hidden.groups?.forEach((g) => h.groups.add(g));
+      data.hidden.ids?.forEach((i) => h.ids.add(i));
+      storeHidden(h);
+    }
     storeEigene();
     const own = Object.keys(data.eigene || {}).length;
     message(`${Object.keys(data.pipeline).length} Leads${own ? ` und ${own} eigene Leads` : ""} aus der Sicherung geladen.`, true);

@@ -205,3 +205,5 @@ body.aside-hidden .aside-handle { left: 0; width: 24px; }
 body.aside-hidden .layout { grid-template-columns: 1fr; padding-left: 30px; }
 body.aside-hidden aside { display: none; }
 @media (max-width: 860px) { .aside-handle { display: none; } }
+.hide-btn { display: block; margin-top: 4px; padding: 3px 8px; font-size: 12px; color: var(--muted); }
+.near-box .hide-btn { display: inline-block; margin-left: 8px; }

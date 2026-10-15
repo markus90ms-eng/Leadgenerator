@@ -260,7 +260,8 @@ function groupDetailHtml(l, colspan) {
       ${g.zentrale ? `<span>Vermutlich Zentrale: <a href="tel:${esc(g.zentrale)}">★ ${esc(fmtPhone(g.zentrale))}</a></span>` : ""}
     </div>
     ${g.imp ? `<div class="grp-imp"><b>Zentrale laut Impressum:</b> ${esc(impressumText(g.imp))}${g.imp.k ? ` · ${esc(kreisName(g.imp.k))}` : ""}</div>` : `<div class="sub">Zentrale laut Impressum: noch nicht geprüft (wird nachts erfasst)</div>`}
-    <div class="sub">Kreise: ${esc(kreise)} · Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.</div>
+    <div class="sub">Kreise: ${esc(kreise)} · Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.
+      <button class="hide-btn" data-hide="${esc(l.id)}">${isHidden(l) ? "Gruppe wieder einblenden" : "Gruppe ausblenden (nicht relevant)"}</button></div>
     <ul class="near-list grp-list">${items}</ul>
   </div></td></tr>`;
 }
@@ -291,7 +292,9 @@ function impressumBadge(l) {
   if (imp.p && plz && imp.p !== plz) {
     return `<span class="badge imp" title="${tip}">Sitz laut Impressum: ${esc(imp.o || imp.p)}</span>`;
   }
-  return `<span class="badge imp ok" title="${tip}">✓ Impressum</span>`;
+  if (imp.p && imp.p === plz) return `<span class="badge imp ok" title="${tip}">✓ Impressum: Sitz vor Ort</span>`;
+  // Impressum gelesen, aber ohne erkennbare Anschrift – nur die Firmierung zeigen
+  return `<span class="badge chain" title="${tip}">Impressum: ${esc(imp.f || "ohne Anschrift")}</span>`;
 }
 
 // Kreis des Firmensitzes bzw. der Gruppen-Zentrale (laut Impressum)
@@ -304,4 +307,35 @@ function sitzMatches(l, mode) {
   if (!k) return false;
   const here = state.tab === "pipeline" || state.tab === "eigene" ? l.kreis : $("#kreis").value;
   return mode === "hier" ? k === here : k !== here;
+}
+
+// ---------- Ausblenden (nicht relevante Gruppen/Betriebe) ------------------
+function hiddenSets() {
+  const h = load("hidden", null) || {};
+  return { groups: new Set(h.groups || []), ids: new Set(h.ids || []) };
+}
+function storeHidden(h) {
+  store("hidden", { groups: [...h.groups], ids: [...h.ids] });
+  state.hiddenCache = null;
+}
+function isHidden(l) {
+  state.hiddenCache ||= hiddenSets();
+  return (l.grp && state.hiddenCache.groups.has(l.grp)) || state.hiddenCache.ids.has(l.id);
+}
+const hiddenCount = (rows) => rows.filter(isHidden).length;
+
+function toggleHidden(l) {
+  const h = hiddenSets();
+  if (isHidden(l)) {
+    if (l.grp) h.groups.delete(l.grp);
+    h.ids.delete(l.id);
+  } else if (l.grp) {
+    if (!confirm(`Ganze Gruppe „${l.gn || l.grp}“ (${l.st} Standorte) ausblenden?\nSie lässt sich über „ausgeblendete zeigen“ wieder einblenden.`)) return;
+    h.groups.add(l.grp);
+  } else {
+    h.ids.add(l.id);
+  }
+  storeHidden(h);
+  if (state.openGroup === l.id) state.openGroup = null;
+  render();
 }

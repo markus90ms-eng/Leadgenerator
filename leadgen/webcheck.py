@@ -28,7 +28,13 @@ USER_AGENT = "Mozilla/5.0 (compatible; Leadgenerator-BW/1.0; +https://markus90ms
 ROBOT_NAME = "Leadgenerator-BW"
 MAX_BYTES = 800_000
 RECHECK_DAYS = 90
-VERSION = 2  # 2: mit Impressum-Daten (imp); ältere Ergebnisse werden neu geprüft
+VERSION = 3  # 2: mit Impressum-Daten (imp), 3: Anschrift auch über getrennte Seitenelemente
+
+
+def is_current(sig):
+    """Muss ein Ergebnis neu geprüft werden? Version 2 ist ausreichend, wenn die Anschrift erkannt wurde."""
+    v = (sig or {}).get("v", 1)
+    return v >= VERSION or (v == 2 and bool((sig.get("imp") or {}).get("p")))
 
 # Kurze Kürzel nur in korrekter Schreibweise (sonst Treffer in normalem Text)
 LEGAL_FORMS = [
@@ -132,6 +138,7 @@ def find_link(base, page, words):
 
 _PLZ_ORT = re.compile(r"\b(?:D-?\s?)?(\d{5})\s+([A-ZÄÖÜ][\wäöüßÄÖÜ.\-]*(?:\s+(?:am|an|im|ob|unter|bei|in|a\.|i\.)\s*[A-ZÄÖÜ][\wäöüß.\-]*|\s+[A-ZÄÖÜ][a-zäöüß]+)?)")
 _STREET = re.compile(r"([A-ZÄÖÜ][\wäöüßÄÖÜ.\- ]{2,40}?(?:stra(?:ß|ss)e|str\.|weg|platz|gasse|allee|ring|damm|ufer|steige|steig|markt|hof|tor|graben|berg|halde|park|feld|wiesen?|garten)\s*\d+\s*[a-zA-Z]?(?:\s*[-/]\s*\d+[a-zA-Z]?)?)", re.I)
+_STREET_WORD = re.compile(r"((?:(?:Am|An der|Im|In der|Auf der|Zum|Zur)\s+)?[A-ZÄÖÜ][\wäöüß.\-]*(?:stra(?:ß|ss)e|str\.|weg|platz|gasse|allee|ring|damm|ufer|steige|steig|markt|hof|tor|graben|berg|halde|park|feld|wiesen?|garten)\s*\d+\s*[a-zA-Z]?(?:\s*[-/]\s*\d+[a-zA-Z]?)?)", re.I)
 _REGISTER = re.compile(r"\b(HR\s?[AB])\s*:?\s*(\d{2,7}\s?[A-Z]?)\b")
 _COURT_NAME = re.compile(r"(?:Amtsgericht|Registergericht[:\s]*(?:Amtsgericht)?|AG)\s+([A-ZÄÖÜ][a-zäöüß]+(?:\s+(?:am|an|im|i\.)\s*[A-ZÄÖÜ]?[\w.]+)?)")
 _SKIP_LINE = re.compile(r"impressum|angaben gem|§\s*5|tmg|ddg|kontakt|anschrift|verantwortlich|vertreten", re.I)
@@ -171,6 +178,13 @@ def impressum_data(page):
             if m:
                 out["t"] = re.sub(r"\s+", " ", m.group(1)).strip()
     text = " ".join(lines)
+    if "p" not in out:  # PLZ und Ort in getrennten Seitenelementen
+        m = _PLZ_ORT.search(text)
+        if m:
+            out["p"], out["o"] = m.group(1), m.group(2).split()[0].strip(" .,")
+            streets = _STREET_WORD.findall(text[max(0, m.start() - 80):m.start()])
+            if streets:
+                out["s"] = re.sub(r"\s+", " ", streets[-1]).strip()
     reg = _REGISTER.search(text)
     if reg:
         court = _COURT_NAME.search(text)
