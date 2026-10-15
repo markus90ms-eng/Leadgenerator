@@ -240,7 +240,7 @@ function pitchPrompt(l) {
 ${facts}
 
 Aufgabe:
-1. Sieh dir die Website an und fasse in 3 Stichpunkten zusammen: Was bietet die Firma, was ist aktuell (Aktionen, neue Produkte, Stellenanzeigen), wen spricht sie an?
+1. Sieh dir die Website und das Impressum an (Firmierung, Firmensitz, Inhaber/Geschäftsführung) und fasse in 3 Stichpunkten zusammen: Was bietet die Firma, was ist aktuell (Aktionen, neue Produkte, Stellenanzeigen), wen spricht sie an?
 2. Empfiehl, welche der Flächen in der Nähe am besten passt (klassisch oder digital) und warum.
 3. Schreib einen Telefonpitch nach meinem Leitfaden, angepasst an diese Firma:
 ${PITCH_LEITFADEN(vertragspartner(l.kreis))}

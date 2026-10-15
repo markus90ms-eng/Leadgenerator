@@ -38,6 +38,17 @@ const nameTokens = (s) => foldName(s).split(/[^a-z0-9]+/).filter((t) => t.length
 const TLDS = "de|com|net|eu|info|org|biz|shop|online|gmbh|ag|at|ch|io|app|team|bayern|berlin|koeln|stuttgart";
 const STREET = "(?:straße|strasse|str\\.?|weg|platz|gasse|allee|ring|steige|steig|damm|ufer|markt|hof|tor|graben|berg|halde)";
 
+// Ist `part` eine am Bildrand abgeschnittene Form von `full`? Am Schnitt darf ein
+// angeschnittener Buchstabe falsch gelesen sein: "ireinerei-metzger.de" ~ "schreinerei-metzger.de"
+function isCutOff(part, full) {
+  if (!part || !full || part === full || part.length >= full.length + 1) return false;
+  let n = 0;
+  while (n < part.length && part[part.length - 1 - n] === full[full.length - 1 - n]) n++;
+  if (n < Math.max(8, part.length - 2) || n >= full.length) return false;
+  // "metzger.de" ist eine eigene Adresse, kein Ausschnitt von "schreinerei-metzger.de"
+  return !(n === part.length && /[-.]/.test(full[full.length - n - 1]));
+}
+
 // Telefon, Website, E-Mail, Adresse und Kandidaten für den Firmennamen aus dem erkannten Text
 function extractFromText(text, lines = [], plzTable = {}) {
   const flat = text.replace(/[|®©]/g, " ");
@@ -56,6 +67,10 @@ function extractFromText(text, lines = [], plzTable = {}) {
     if (d) domains.add(d);
   }
   for (const e of emails) { const d = normDomain(e); if (d) domains.add(d); }
+  // Abgeschnittene Webadresse ("ireinerei-metzger.de") mit der E-Mail-Domain vervollständigen
+  for (const d of [...domains]) {
+    if ([...domains].some((x) => x !== d && isCutOff(d, x))) domains.delete(d);
+  }
 
   const phones = new Set();
   const phoneRe = /(?:(?:\+|00)\s?49\s?(?:\(0\))?|\b0)[\s\-–/.()]*\d{2,5}(?:[\s\-–/.()]*\d){3,10}/g;
@@ -156,7 +171,11 @@ function findCandidates(ix, found, text) {
       for (const [q, list] of ix.byPhone) if (q !== p && q.length >= 8 && (q.startsWith(p) || p.startsWith(q))) list.forEach((i) => add(i, 60, "Telefon"));
     }
   }
-  for (const d of found.domains) for (const i of ix.byDomain.get(d) || []) add(i, 100, "Website");
+  for (const d of found.domains) {
+    for (const i of ix.byDomain.get(d) || []) add(i, 100, "Website");
+    // Am Bildrand abgeschnitten: "ireinerei-metzger.de" passt zu "schreinerei-metzger.de"
+    if (d.length >= 8) for (const [q, list] of ix.byDomain) if (q !== d && isCutOff(d, q)) list.forEach((i) => add(i, 80, "Website"));
+  }
   const minGot = Math.min(6, 0.5 * Math.log(ix.rows.length)); // mindestens ein seltener Namensbestandteil
   const partial = new Map(); // row index -> Map(token -> Gewicht)
   const words = new Set(nameTokens(text + " " + found.domains.map((d) => d.split(".")[0]).join(" ")));
@@ -369,6 +388,23 @@ async function searchEverywhere(job) {
   }
 }
 
+// Website: die vollständige Adresse aus den Daten statt einer abgeschnittenen vom Foto
+function completeWebsite(fromPhoto, fromData, sure) {
+  if (!fromData) return fromPhoto || "";
+  if (!fromPhoto) return fromData;
+  const a = normDomain(fromPhoto), b = normDomain(fromData);
+  return isCutOff(a, b) || sure ? fromData : fromPhoto;
+}
+
+// Impressum: aus dem nächtlichen Website-Check, sonst Link zum Selbst-Nachsehen
+function impressumHint(job) {
+  const imp = job.lead?.ws?.imp;
+  if (imp) return `<div class="grp-imp"><b>Laut Impressum:</b> ${esc(impressumText(imp))}</div>`;
+  const d = normDomain(job.form.website || "");
+  return d ? `<div class="sub">Impressum noch nicht geprüft · <a href="https://${esc(d)}/impressum" target="_blank" rel="noopener">Impressum öffnen</a>
+    · <a href="https://${esc(d)}" target="_blank" rel="noopener">Website öffnen</a></div>` : "";
+}
+
 async function pickCandidate(job, id) {
   job.match = id;
   const cand = job.candidates.find((c) => c.id === id);
@@ -379,7 +415,7 @@ async function pickCandidate(job, id) {
     job.lead = l;
     Object.assign(job.form, {
       name: l.name, category: l.category || "", kreis: cand.kreis, address: l.address || job.found.address || l.city || "",
-      phone: job.ocrForm.phone || l.phone || "", website: job.ocrForm.website || l.website || "",
+      phone: job.ocrForm.phone || l.phone || "", website: completeWebsite(job.ocrForm.website, l.website, cand.sure),
       email: job.ocrForm.email || l.email || "",
     });
   } catch (_) { /* Kreisdaten fehlen – Formular bleibt wie erkannt */ }
@@ -430,6 +466,7 @@ function jobHtml(job) {
       <label>Website<input data-f="website" value="${esc(v.website)}"></label>
       <label>E-Mail<input data-f="email" value="${esc(v.email)}"></label>
     </div>
+    ${impressumHint(job)}
     <details><summary>Erkannter Text</summary><pre>${esc(job.text) || "–"}</pre></details>
     <div class="job-actions">
       <button class="pitch-btn" data-keep="${job.key}">Als eigenen Lead speichern</button>
