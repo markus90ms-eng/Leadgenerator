@@ -431,7 +431,7 @@ async function init() {
     renderCats();
     render();
   };
-  kreisSel.onchange = () => { store("kreis", kreisSel.value); state.focus = null; loadKreis(); };
+  kreisSel.onchange = () => { store("kreis", kreisSel.value); state.focus = null; state.starView = null; loadKreis(); };
   $("#radius").value = load("radius", "500");
   $("#radius").onchange = () => { store("radius", $("#radius").value); render(); };
   $("#only-near").oninput = () => { state.limit = 200; render(); };
@@ -583,6 +583,10 @@ function currentRows() {
     return Object.entries(state.pipeline).filter(([, p]) => pipeTabMatches(p, state.pipeTab))
       .map(([id, p]) => enrich({ ...p.lead, id }, monthsAgo(12)));
   }
+  if (state.tab === "search" && state.starView) {  // Stern-Betriebe aus allen Kreisen
+    const cats = new Set(selectedCats());
+    return state.starView.rows.filter((l) => cats.has(l.category)).map((l) => enrich(l, monthsAgo(12)));
+  }
   const data = state.kreisData[$("#kreis").value];
   if (!data) return [];
   const since = monthsAgo(state.tab === "new" ? +$("#months").value : 12);
@@ -644,6 +648,9 @@ function render() {
     $("#summary").innerHTML = all.length
       ? `<b>${rows.length}</b> Leads · ${esc(PIPE_TABS.find(([k]) => k === state.pipeTab)?.[1] || "")}`
       : Object.keys(state.pipeline).length ? "Hier liegt noch nichts." : "Noch keine Leads gemerkt. Setze in der Firmensuche einen Status oder eine Notiz.";
+  } else if (state.tab === "search" && state.starView) {
+    $("#summary").innerHTML = `<span class="star-sum">★ <b>${rows.length}</b> Stern-Betriebe aus allen Kreisen`
+      + ` (${state.starView.accs} Salesforce-Accounts mit Stern)</span> · <a href="#" id="star-exit">zurück zur Kreisansicht</a>`;
   } else {
     $("#summary").innerHTML = all.length
       ? `<b>${rows.length}</b> von ${all.length} Betrieben` + (neu ? ` · <b>${neu}</b> neu am Markt` : "")
@@ -734,7 +741,7 @@ function rowHtml(l, ownIds = ownMatchIds()) {
   return `<tr class="row-main">
     <td>${scoreAmpelHtml(l)}${sfsDot(l)}</td>
     <td class="name">${l.photo ? `<img class="thumb" src="${l.photo}" alt="">` : ""}${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
-    <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
+    <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" || (state.tab === "search" && state.starView) ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
     <td class="contact">${contact}</td>
     <td class="status-note"><select data-id="${esc(l.id)}" aria-label="Status">${statusOpts}</select>
