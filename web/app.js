@@ -326,6 +326,16 @@ async function init() {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
+  const setAside = (hidden) => {
+    document.body.classList.toggle("aside-hidden", hidden);
+    $("#aside-show").hidden = !hidden;
+    store("asideHidden", hidden);
+    fitNearBoxes();
+    state.map?.invalidateSize();
+  };
+  $("#aside-hide").onclick = () => setAside(true);
+  $("#aside-show").onclick = () => setAside(false);
+  setAside(load("asideHidden", false));
   $("#sort-by").onchange = () => {
     const k = $("#sort-by").value;
     state.sort = { key: k, dir: ["name", "city", "category"].includes(k) ? 1 : -1 };

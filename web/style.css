@@ -195,3 +195,10 @@ aside label.btn.sf-csv:hover { border-color: var(--accent); }
 .folder-box #folder-connect { width: 100%; font-weight: 600; }
 .folder-actions { display: flex; gap: 6px; margin-top: 6px; }
 .folder-actions button { font-size: 12px; padding: 5px 8px; }
+
+/* Filterleiste ein-/ausklappen */
+.aside-toggle { font-size: 12px; padding: 5px 10px; }
+aside .aside-toggle { width: 100%; margin-bottom: 12px; color: var(--muted); }
+body.aside-hidden .layout { grid-template-columns: 1fr; }
+body.aside-hidden aside { display: none; }
+#aside-show { font-weight: 600; color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
