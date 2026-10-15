@@ -81,7 +81,7 @@ function sfsDetailHtml(l, colspan) {
   const a = m.acc, s = sfsState(m);
   const offen = a.offen && a.offen.length
     ? `<tr><td>Offene Aufgaben</td><td><b class="${a.offen_blockt === false ? "" : "sfs-bad"}">${esc(a.offen.join(", "))}</b> (geplanter Anruf/Termin) · ${a.offen_blockt === false ? "ohne Kommentar, zählt nicht als belegt" : esc(a.offen_hinweis || "belegt")}${a.offen_kommentar ? `<div class="sub">Kommentar: „${esc(a.offen_kommentar)}“</div>` : ""}</td></tr>` : "";
-  const kontakt = a.letzter_kontakt ? `<b>${fmtDate(a.letzter_kontakt)}</b> (${sfsMonths(s.days)})${a.quelle ? " · Quelle: " + esc(a.quelle) : ""}` : esc(s.txt);
+  const kontakt = a.letzter_kontakt ? `<b>${fmtDate(a.letzter_kontakt)}</b> (${sfsMonths(s.days)})${a.quelle ? " · Quelle: " + esc(a.quelle) : ""}${a.quellen ? `<div class="sub">Aktivität-Feld: ${esc(fmtDate(a.quellen.feld) || "–")} · Verlauf: ${esc(fmtDate(a.quellen.verlauf) || "–")} · Zuletzt geändert: ${esc(fmtDate(a.quellen.geaendert) || "–")}</div>` : ""}` : esc(s.txt);
   const sperre = s.c === "r" ? `<b class="sfs-bad">ja${a.sperre_status ? ": " + esc(a.sperre_status) : ""}</b>` : "nein";
   const frei = s.c === "g" ? `<b class="sfs-good">ja, älter als 3 Monate</b>` : s.c === "y" ? (s.offen ? "nein, offene Aufgabe/Termin " + esc(a.offen.join(", ")) : "nein, kürzlich kontaktiert") : s.c === "r" ? "nein, gesperrt" : "unklar";
   return `<tr class="near-detail"><td colspan="${colspan}"><div class="near-box">
