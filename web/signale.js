@@ -51,10 +51,11 @@ function ampel(l, reason, size) {
 
 const AMPEL_LABEL = { g: "grün – gute Chancen", y: "gelb – prüfen", r: "rot – wenig Signale" };
 
-function ampelHtml(l) {
-  const tip = `${AMPEL_LABEL[l.ampel]}\n${l.ampel_why.join("\n")}\n\nGröße ${l.size} (geschätzt): ${l.size_why.join(", ")}`
-    + (l.ws ? "" : "\nWebsite noch nicht geprüft");
-  return `<span class="ampel" title="${esc(tip)}"><span class="dot ${l.ampel}"></span><span class="size">${l.size}</span></span>`;
+// Score und Ampel in einem Kreis: Zahl = Score, Farbe = Ampel, Buchstabe = Größe (geschätzt)
+function scoreAmpelHtml(l) {
+  const tip = `Score ${l.score}:\n${l.score_reasons.join("\n")}\n\nAmpel ${AMPEL_LABEL[l.ampel]}:\n${l.ampel_why.join("\n")}`
+    + `\n\nGröße ${l.size} (geschätzt): ${l.size_why.join(", ")}` + (l.ws ? "" : "\nWebsite noch nicht geprüft");
+  return `<span class="sa ${l.ampel}" title="${esc(tip)}">${l.score}<small>${l.size}</small></span>`;
 }
 
 function signalText(l) {
@@ -72,19 +73,9 @@ function signalText(l) {
 function lookupLinks(l) {
   const ort = l.city || (l.address || "").replace(/^.*\d{5}\s*/, "") || "";
   const q = encodeURIComponent;
-  return `<div class="lookup">
-    <a href="https://www.google.com/search?q=${q(`site:northdata.de "${l.name}" ${ort}`)}" target="_blank" rel="noopener" title="Umsatz, Mitarbeiter, Kapital bei North Data">North Data</a>
-    <a href="https://www.handelsregister.de/rp_web/normalesuche.xhtml" target="_blank" rel="noopener" data-copy="${esc(l.name)}" title="Öffnet die Registersuche; der Firmenname wird kopiert">Register</a>
-    <a href="https://www.arbeitsagentur.de/jobsuche/suche?angebotsart=1&was=${q(l.name)}&wo=${q(ort)}" target="_blank" rel="noopener" title="Offene Stellen in der Jobbörse">Jobs</a>
-  </div>`;
+  return `<a class="ib" href="https://www.google.com/search?q=${q(`site:northdata.de "${l.name}" ${ort}`)}" target="_blank" rel="noopener" title="Umsatz, Mitarbeiter, Kapital bei North Data">📊 North Data</a>`
+    + `<a class="ib" href="https://www.arbeitsagentur.de/jobsuche/suche?angebotsart=1&was=${q(l.name)}&wo=${q(ort)}" target="_blank" rel="noopener" title="Offene Stellen in der Jobbörse">💼 Jobs</a>`;
 }
-
-document.addEventListener("click", (e) => {
-  const a = e.target.closest("a[data-copy]");
-  if (!a) return;
-  navigator.clipboard?.writeText(a.dataset.copy).catch(() => {});
-  message(`„${a.dataset.copy}“ kopiert – in der Registersuche ins Feld „Firma“ einfügen (Strg+V).`, true);
-});
 
 // ---------- Mail (Outlook) ------------------------------------------------
 const MAIL_TEMPLATES = {
@@ -259,7 +250,8 @@ function groupDetailHtml(l, colspan) {
       <b>Gruppe ${esc(g.name)}: ${g.n} Standorte in ${g.orte} Orten</b>
       ${g.zentrale ? `<span>Vermutlich Zentrale: <a href="tel:${esc(g.zentrale)}">★ ${esc(fmtPhone(g.zentrale))}</a></span>` : ""}
     </div>
-    ${g.imp ? `<div class="grp-imp"><b>Zentrale laut Impressum:</b> ${esc(impressumText(g.imp))}${g.imp.k ? ` · ${esc(kreisName(g.imp.k))}` : ""}</div>` : `<div class="sub">Zentrale laut Impressum: noch nicht geprüft (wird nachts erfasst)</div>`}
+    ${g.imp ? `<div class="grp-imp"><b>Zentrale laut Impressum:</b> ${esc(impressumText(g.imp))}${g.imp.k ? ` · ${esc(kreisName(g.imp.k))}` : ""}`
+      + `${g.imp.fx?.length ? `<div class="sub">Außerdem im Impressum genannt: ${esc(g.imp.fx.join(", "))}</div>` : ""}</div>` : `<div class="sub">Zentrale laut Impressum: noch nicht geprüft (wird nachts erfasst)</div>`}
     <div class="sub">Kreise: ${esc(kreise)} · Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.
       <button class="hide-btn" data-hide="${esc(l.id)}">${isHidden(l) ? "Gruppe wieder einblenden" : "Gruppe ausblenden (nicht relevant)"}</button></div>
     <ul class="near-list grp-list">${items}</ul>

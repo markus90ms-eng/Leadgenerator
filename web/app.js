@@ -287,12 +287,79 @@ function focusOnMap(l) {
 }
 
 // ---------- Setup ---------------------------------------------------------
+// ---------- Auf-/zuklappbare Bereiche der Filterleiste ----------------------
+function foldActive(sec) {
+  if (sec.dataset.fold === "branchen") {  // Punkt, wenn die Auswahl von der Standard-Auswahl abweicht
+    if (!state.meta) return false;
+    const a = new Set(selectedCats()), d = new Set(defaultCats());
+    return a.size !== d.size || [...a].some((id) => !d.has(id));
+  }
+  return [...sec.querySelectorAll("input, select")].some((el) => {
+    if (el.closest(".checklist") || el.id === "kreis" || el.type === "file") return false;
+    if (el.type === "checkbox") return el.checked !== el.defaultChecked;
+    if (el.type === "range") return el.value !== el.defaultValue;
+    if (el.type === "search" || el.type === "text") return el.value.trim() !== "";
+    if (el.tagName === "SELECT") {
+      const def = [...el.options].findIndex((o) => o.defaultSelected);
+      return el.selectedIndex !== Math.max(def, 0);
+    }
+    return false;
+  });
+}
+
+function updateFoldDots() {
+  document.querySelectorAll("aside section[data-fold]").forEach((sec) => {
+    sec.querySelector(".fold-dot")?.toggleAttribute("hidden", !foldActive(sec));
+  });
+}
+
+function initFolds() {
+  const closed = new Set(load("foldsClosed", []));
+  const set = (sec, isClosed) => {
+    sec.classList.toggle("folded", isClosed);
+    isClosed ? closed.add(sec.dataset.fold) : closed.delete(sec.dataset.fold);
+  };
+  document.querySelectorAll("aside section[data-fold]").forEach((sec) => {
+    const first = sec.firstElementChild;
+    const label = first.matches("label") ? first : first.querySelector("label");
+    const head = document.createElement("div");
+    head.className = "fold-head";
+    first.before(head);
+    head.append(first);
+    const body = document.createElement("div");
+    body.className = "fold-body";
+    while (head.nextSibling) body.append(head.nextSibling);
+    sec.append(body);
+    label.insertAdjacentHTML("afterbegin", '<span class="fold-arrow"></span>');
+    label.insertAdjacentHTML("beforeend", '<span class="fold-dot" title="Filter aktiv" hidden></span>');
+    label.removeAttribute("for");
+    label.onclick = (e) => {
+      e.preventDefault();
+      set(sec, !sec.classList.contains("folded"));
+      store("foldsClosed", [...closed]);
+    };
+    set(sec, closed.has(sec.dataset.fold));
+  });
+  const all = (isClosed) => (e) => {
+    e.preventDefault();
+    document.querySelectorAll("aside section[data-fold]").forEach((sec) => set(sec, isClosed));
+    store("foldsClosed", [...closed]);
+  };
+  $("#fold-open").onclick = all(false);
+  $("#fold-close").onclick = all(true);
+  const aside = document.querySelector("aside");
+  aside.addEventListener("input", updateFoldDots);
+  aside.addEventListener("change", updateFoldDots);
+  updateFoldDots();
+}
+
 async function init() {
   state.pipeline = load("pipeline", {});
   state.pipeTab = load("pipeTab", "alle");
   updatePipeBadge();
   initEigene();
   initMail();
+  initFolds();
   try {
     state.meta = await getJson("data/meta.json");
   } catch (err) {
@@ -558,6 +625,7 @@ function filtered(rows) {
 
 function render() {
   if (!state.meta) return;
+  updateFoldDots();
   if (state.tab === "news") return renderNews();
   if (state.tab === "salesforce") return renderSalesforce();
   const all = currentRows();
@@ -586,8 +654,8 @@ function render() {
   }
 
   const cols = [
-    ["score", "Score"], ["ampel_pts", "Ampel"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
-    [null, "Kontakt"], ["near_count", "Ströer im Umkreis"], ["status", "Status"], [null, "Notiz"], [null, ""],
+    ["score", "Score"], ["name", "Betrieb"], ["category", "Branche"], ["address", "Adresse"],
+    [null, "Kontakt"], ["status", "Status / Notiz"], ["near_count", "Ströer im Umkreis"],
   ];
   const head = cols.map(([k, label]) =>
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
@@ -629,7 +697,6 @@ function fmtPhone(p) {
 }
 
 function rowHtml(l) {
-  const scoreCls = l.score >= 60 ? "high" : l.score < 35 ? "low" : "";
   const badges = [
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
     l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
@@ -651,29 +718,31 @@ function rowHtml(l) {
   const google = `https://www.google.com/search?q=${encodeURIComponent(`${l.name} ${l.city || l.address || kreisName(l.kreis)}`)}`;
   const osmId = l.match || l.id;
   const osm = osmId.startsWith("osm:") ? `https://www.openstreetmap.org/${osmId.slice(4)}` : "";
-  return `<tr>
-    <td><span class="score ${scoreCls}" title="${esc(l.score_reasons.join("\n"))}">${l.score}</span></td>
-    <td>${ampelHtml(l)}</td>
+  const hideLabel = isHidden(l) ? "Einblenden" : l.grp ? "Gruppe ausblenden" : "Ausblenden";
+  return `<tr class="row-main">
+    <td>${scoreAmpelHtml(l)}</td>
     <td class="name">${l.photo ? `<img class="thumb" src="${l.photo}" alt="">` : ""}${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
     <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>
     <td class="contact">${contact}</td>
+    <td class="status-note"><select data-id="${esc(l.id)}" aria-label="Status">${statusOpts}</select>
+      <textarea data-id="${esc(l.id)}" rows="1" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
     <td class="near">${l.near?.count
       ? `<button class="near-btn${state.openNear.has(l.id) ? " open" : ""}" data-near="${esc(l.id)}" aria-expanded="${state.openNear.has(l.id)}">${nearHtml(l.near)}</button>`
       : nearHtml(l.near)}</td>
-    <td><select data-id="${esc(l.id)}" aria-label="Status">${statusOpts}</select></td>
-    <td><textarea data-id="${esc(l.id)}" placeholder="Notiz …" aria-label="Notiz">${esc(l.notes)}</textarea></td>
-    <td class="contact">
-      <button class="pitch-btn" data-pitch="${esc(l.id)}" title="Individuellen Telefonpitch mit Claude erstellen">Pitch</button>
-      <button class="pitch-btn mail-btn" data-mail="${esc(l.id)}" title="Mail mit Vorlage in Outlook verfassen">Mail</button>
-      <a href="${google}" target="_blank" rel="noopener">Google</a>
-      ${osm ? `<a href="${osm}" target="_blank" rel="noopener">Karte</a>` : ""}
-      ${l.source_link ? `<a href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}
-      ${lookupLinks(l)}
-      <button class="hide-btn" data-hide="${esc(l.id)}" title="${isHidden(l) ? "Wieder einblenden" : l.grp ? "Ganze Gruppe ausblenden" : "Betrieb ausblenden"}">${isHidden(l) ? "Einblenden" : l.grp ? "Gruppe ausblenden" : "Ausblenden"}</button>
-      ${state.tab === "eigene" ? `<button class="del-btn" data-del="${esc(l.id)}" title="Eigenen Lead löschen">Löschen</button>` : ""}
-    </td>
-  </tr>`;
+  </tr>
+  <tr class="row-acts"><td colspan="2"></td><td colspan="5"><div class="actrow">
+    <button class="ib p" data-pitch="${esc(l.id)}" title="Individuellen Telefonpitch mit Claude erstellen">Pitch</button>
+    <button class="ib m" data-mail="${esc(l.id)}" title="Mail mit Vorlage in Outlook verfassen">✉ Mail</button>
+    <span class="sep"></span>
+    ${osm ? `<a class="ib" href="${osm}" target="_blank" rel="noopener">🗺 Karte</a>` : ""}
+    <a class="ib" href="${google}" target="_blank" rel="noopener">🔎 Google</a>
+    ${lookupLinks(l)}
+    ${l.source_link ? `<a class="ib" href="${esc(l.source_link)}" target="_blank" rel="noopener">Quelle</a>` : ""}
+    <span class="sep"></span>
+    <button class="ib h" data-hide="${esc(l.id)}" title="${isHidden(l) ? "Wieder einblenden" : l.grp ? "Ganze Gruppe ausblenden" : "Betrieb ausblenden"}">${isHidden(l) ? "↺" : "⊘"} ${hideLabel}</button>
+    ${state.tab === "eigene" ? `<button class="ib del" data-del="${esc(l.id)}" title="Eigenen Lead löschen">Löschen</button>` : ""}
+  </div></td></tr>`;
 }
 
 // ---------- Pipeline-Unterreiter -------------------------------------------

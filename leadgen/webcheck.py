@@ -28,13 +28,17 @@ USER_AGENT = "Mozilla/5.0 (compatible; Leadgenerator-BW/1.0; +https://markus90ms
 ROBOT_NAME = "Leadgenerator-BW"
 MAX_BYTES = 800_000
 RECHECK_DAYS = 90
-VERSION = 3  # 2: mit Impressum-Daten (imp), 3: Anschrift auch über getrennte Seitenelemente
+VERSION = 4  # 2: mit Impressum-Daten (imp), 3: Anschrift auch über getrennte Seitenelemente,
+#              4: Impressum auch ohne Link (/impressum), passende Firma bei mehreren im Impressum
 
 
-def is_current(sig):
-    """Muss ein Ergebnis neu geprüft werden? Version 2 ist ausreichend, wenn die Anschrift erkannt wurde."""
+def is_current(sig, strict=False):
+    """Muss ein Ergebnis neu geprüft werden? Ohne `strict` (Einzelbetriebe) reicht Version 3 bzw.
+    Version 2 mit erkannter Anschrift; Gruppen werden immer mit der neuesten Version geprüft."""
     v = (sig or {}).get("v", 1)
-    return v >= VERSION or (v == 2 and bool((sig.get("imp") or {}).get("p")))
+    if strict:
+        return v >= VERSION
+    return v >= 3 or (v == 2 and bool((sig.get("imp") or {}).get("p")))
 
 # Kurze Kürzel nur in korrekter Schreibweise (sonst Treffer in normalem Text)
 LEGAL_FORMS = [
@@ -127,9 +131,9 @@ def links_of(base, page):
 
 
 def find_link(base, page, words):
-    host = urllib.parse.urlsplit(base).hostname
+    domain = domain_of(base)
     for url, label, href in links_of(base, page):
-        if urllib.parse.urlsplit(url).hostname not in (host, None):
+        if domain_of(url) != domain:  # www. und ohne www. gelten als gleiche Website
             continue
         if any(w in label or w in href for w in words):
             return url
@@ -144,7 +148,7 @@ _COURT_NAME = re.compile(r"(?:Amtsgericht|Registergericht[:\s]*(?:Amtsgericht)?|
 _SKIP_LINE = re.compile(r"impressum|angaben gem|§\s*5|tmg|ddg|kontakt|anschrift|verantwortlich|vertreten", re.I)
 
 
-_FORM_END = re.compile(r"^(.*?(?:GmbH\s*(?:&|\+|und)\s*Co\.?\s*KG|gGmbH|GmbH|AG|KGaA|KG|e\.\s?V\.|eG|UG(?:\s*\(haftungsbeschränkt\))?|SE|OHG|GbR|e\.\s?K(?:fm|fr)?\.))", re.I)
+_FORM_END = re.compile(r"^(.*?\b(?:GmbH\s*(?:&|\+|und)\s*Co\.?\s*KG|gGmbH|GmbH|AG|KGaA|KG|e\.\s?V\.|eG|UG(?:\s*\(haftungsbeschränkt\))?|SE|OHG|GbR|e\.\s?K(?:fm|fr)?\.)(?!\w))", re.I)
 
 
 def cut_after_form(name):
@@ -158,25 +162,70 @@ def impressum_lines(page):
     return [t for t in (text_of(p).strip(" ,;|") for p in parts) if t]
 
 
-def impressum_data(page):
-    """Firmierung, Anschrift, Telefon und Registereintrag aus dem Impressum (nur Firmendaten)."""
-    lines = impressum_lines(page)[:200]
+def _fold(text):
+    t = (text or "").lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+    return re.sub(r"[^a-z0-9]", "", t)
+
+
+def _fits_domain(firm, domain):
+    """Passt der Firmenname zur Website? 'Johanniter-Unfall-Hilfe e.V.' ~ johanniter.de"""
+    core = (domain or "").split(".")[0]
+    name = _fold(firm)
+    parts = [p for p in re.split(r"[^a-z0-9]+", core) if len(p) >= 4]
+    return bool(name) and (_fold(core) in name or any(_fold(p) in name for p in parts))
+
+
+def _is_firm_line(line):
+    return len(line) <= 90 and legal_form(line) and not _SKIP_LINE.search(line) \
+        and not _REGISTER.search(line) and "@" not in line
+
+
+def _address(lines, i, j):
+    """PLZ/Ort, Straße (und Telefon) in lines[i:j]."""
     out = {}
-    for i, line in enumerate(lines):
-        if "f" not in out and len(line) <= 90 and legal_form(line) and not _SKIP_LINE.search(line) \
-                and not _REGISTER.search(line) and "@" not in line:
-            out["f"] = cut_after_form(re.sub(r"\s+", " ", line))
+    for k in range(i, min(j, len(lines))):
+        line = lines[k]
         if "p" not in out:
             m = _PLZ_ORT.search(line)
             if m and not re.search(r"postfach", line, re.I):
                 out["p"], out["o"] = m.group(1), m.group(2).strip(" .,")
-                st = _STREET.search(line[:m.start()]) or (i > 0 and _STREET.search(lines[i - 1]))
+                st = _STREET.search(line[:m.start()]) or (k > i and _STREET.search(lines[k - 1]))
                 if st:
                     out["s"] = re.sub(r"\s+", " ", st.group(1)).strip()
         if "t" not in out and re.search(r"\b(tel|telefon|fon|phone)\b", line, re.I):
             m = re.search(r"(\+?\d[\d\s/()\-–.]{5,}\d)", line)
             if m:
                 out["t"] = re.sub(r"\s+", " ", m.group(1)).strip()
+    return out
+
+
+def impressum_data(page, domain=""):
+    """Firmierung, Anschrift, Telefon und Registereintrag aus dem Impressum (nur Firmendaten).
+
+    Stehen mehrere Firmen im Impressum (z. B. Verein und Stiftung), wird die genommen,
+    deren Name zur Website passt; die übrigen stehen in 'fx'."""
+    lines = impressum_lines(page)[:200]
+    firms = [i for i, line in enumerate(lines) if _is_firm_line(line)]
+    blocks = []
+    for n, i in enumerate(firms):
+        nxt = firms[n + 1] if n + 1 < len(firms) else i + 12
+        block = {"f": cut_after_form(re.sub(r"\s+", " ", lines[i])), **_address(lines, i, min(nxt, i + 12))}
+        if not any(b["f"] == block["f"] for b in blocks):
+            blocks.append(block)
+    out = {}
+    if blocks:
+        def rank(b):
+            return (not (domain and _fits_domain(b["f"], domain)), "p" not in b, blocks.index(b))
+        out = dict(min(blocks, key=rank))
+        others = [b["f"] for b in blocks if b["f"] != out["f"]][:4]
+        if others:
+            out["fx"] = others
+    if "p" not in out:
+        out.update({k: v for k, v in _address(lines, 0, len(lines)).items() if k not in out})
+    if "t" not in out:
+        tel = _address(lines, 0, len(lines)).get("t")
+        if tel:
+            out["t"] = tel
     text = " ".join(lines)
     if "p" not in out:  # PLZ und Ort in getrennten Seitenelementen
         m = _PLZ_ORT.search(text)
@@ -192,12 +241,12 @@ def impressum_data(page):
     return out if ("p" in out or "f" in out) else {}
 
 
-def analyze(home, impressum="", career=""):
+def analyze(home, impressum="", career="", domain=""):
     """Signale aus den Seiten (HTML-Text) ableiten."""
     out = {}
     imp_text = text_of(impressum) if impressum else ""
     home_text = text_of(home)
-    imp = impressum_data(impressum) if impressum else {}
+    imp = impressum_data(impressum, domain) if impressum else {}
     if imp:
         out["imp"] = imp
     rf = legal_form(imp.get("f") or imp_text) if imp_text else ""
@@ -228,6 +277,12 @@ def analyze(home, impressum="", career=""):
     return out
 
 
+def _looks_like_impressum(page):
+    """Schutz gegen Seiten, die für jede Adresse die Startseite liefern."""
+    text = text_of(page)
+    return bool(re.search(r"impressum|imprint|angaben gem", text, re.I)) and bool(_PLZ_ORT.search(text))
+
+
 def check(url, today, fetcher=None):
     """Eine Firmen-Website prüfen -> Signal-Dict (immer mit 'd')."""
     fetcher = fetcher or fetch
@@ -246,8 +301,14 @@ def check(url, today, fetcher=None):
     imp_url = find_link(final, page, ("impressum", "imprint", "legal notice"))
     car_url = find_link(final, page, ("karriere", "jobs", "stellenangebote", "stellen", "career", "ausbildung"))
     imp = fetcher(imp_url) if imp_url else None
+    if not imp:  # kein Link auf der Startseite (z. B. per JavaScript) -> übliche Adressen probieren
+        for path in ("/impressum/", "/impressum", "/imprint", "/impressum.html"):
+            got = fetcher(urllib.parse.urljoin(final, path))
+            if got and _looks_like_impressum(got[1]):
+                imp = got
+                break
     car = fetcher(car_url) if car_url and car_url != imp_url else None
-    out = analyze(page, imp[1] if imp else "", car[1] if car else "")
+    out = analyze(page, imp[1] if imp else "", car[1] if car else "", domain)
     out["d"] = today
     out["v"] = VERSION
     return out

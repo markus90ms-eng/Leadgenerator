@@ -15,7 +15,7 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 - **Größe & Ampel** – geschätzte Unternehmensgröße (S/M/L) aus Rechtsform, Anzahl Standorte und Website-Angaben; Ampel (grün/gelb/rot) aus Aktivitätssignalen wie „sucht Personal“, Online-Shop, Social Media. Filter „ab mittel“, „nur grün“, „sucht Personal“. Edeka, Rewe & Co. zählen als Händlerverbund (oft selbstständige Kaufleute), nicht als Kette.
 - **Website-Check** – jede Nacht werden bis zu 15.000 Firmen-Websites geprüft (Startseite, Impressum, Karriereseite; robots.txt wird beachtet, keine Personendaten). Nach etwa zwei bis drei Wochen sind alle Websites einmal erfasst, danach wird alle 90 Tage aufgefrischt.
 - **Gruppen** – Betriebe mit gleicher Firmen-Website (z. B. alle Kinderhäuser eines Trägers) werden über alle Kreise als Gruppe erkannt: Abzeichen mit Anzahl Standorte, aufklappbare Liste mit vermuteter Zentrale, Schalter „Gruppen zusammenfassen“. Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.
-- **Impressum-Abgleich** – der Website-Check liest aus dem Impressum Firmierung, Anschrift, Telefon und Registereintrag. Bei Betrieben mit anderem Firmensitz steht „Sitz laut Impressum: …“, bei Gruppen die Zentrale (Gruppen-Websites werden zuerst geprüft). Filter: Website mit/ohne, nur Gruppen/Einzelbetriebe, Firmensitz im Kreis/außerhalb; Sortierung nach Score, Ampel, Größe, Standorten, Ströer-Nähe, Name, Ort oder Branche.
+- **Impressum-Abgleich** – der Website-Check liest aus dem Impressum Firmierung, Anschrift, Telefon und Registereintrag. Bei Betrieben mit anderem Firmensitz steht „Sitz laut Impressum: …“, bei Gruppen die Zentrale (Gruppen-Websites werden zuerst geprüft). Ist das Impressum auf der Startseite nicht verlinkt, wird direkt `/impressum` probiert; stehen mehrere Firmen im Impressum, gilt die, die zur Website passt. Filter: Website mit/ohne, nur Gruppen/Einzelbetriebe, Firmensitz im Kreis/außerhalb; Sortierung nach Score, Ampel, Größe, Standorten, Ströer-Nähe, Name, Ort oder Branche.
 - **Mail an Outlook** – Knopf „Mail“ bzw. Klick auf die E-Mail-Adresse: Vorlage wählen (nach dem Telefonat, Terminbestätigung, Unterlagen), Ansprechpartner eintragen, Text prüfen, in Outlook öffnen. Nur nach vorherigem Kontakt verwenden (UWG).
 - **Nachschlagen** – Links zu North Data, Handelsregister und Jobbörse je Betrieb.
 - **Ströer-Werbeträger im Umkreis** – zeigt pro Betrieb die Ströer-Flächen in der Nähe (Großfläche, City-Light, DOOH …), filterbar nach Trägerart, mit Kartenebene und CSV-Spalten. Quelle: öffentliche Ströer-Standortkarte; nur Ströer-eigene Flächen (Pächter 368, 252), ohne Preise.
@@ -74,3 +74,8 @@ Alle Leads, Status und Notizen liegen nur lokal in `leads.db` bzw. im Browser. G
 ```
 python -m unittest discover -s tests
 ```
+
+### Bedienung der Liste
+- **Score-Kreis**: Zahl = Score, Farbe = Ampel (grün/gelb/rot), Buchstabe = geschätzte Größe; beim Darüberfahren stehen alle Gründe.
+- **Knopfleiste unter jedem Betrieb**: Pitch · Mail | Karte · Google · North Data · Jobs | Ausblenden.
+- **Filterleiste**: jeder Bereich lässt sich auf- und zuklappen („alle auf · alle zu“); ein Punkt zeigt, wo ein Filter aktiv ist.

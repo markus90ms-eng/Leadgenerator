@@ -24,7 +24,9 @@
 <button id="aside-handle" class="aside-handle" title="Filterleiste ein-/ausklappen" aria-label="Filterleiste ein- oder ausklappen"><span>◀</span></button>
 <div class="layout">
   <aside>
-    <section class="only-eigene">
+    <div class="fold-all"><a href="#" id="fold-open">alle auf</a> · <a href="#" id="fold-close">alle zu</a></div>
+
+    <section class="only-eigene" data-fold="fotos">
       <label>Fotos hinzufügen</label>
       <label class="photo-drop" id="photo-drop" for="photo-input">
         <b>📷 Fotos auswählen</b>
@@ -92,13 +94,13 @@
       <p class="hint">Potenzial (0–100): bisheriger Umsatz, Ex-Kunde, Zeit seit der letzten Buchung, fehlende Betreuung und Firmengröße. Mit der Maus über die Zahl fahren, um die Gründe zu sehen.</p>
     </section>
 
-    <section class="only-search only-new only-news">
+    <section class="only-search only-new only-news" data-fold="kreis">
       <label for="kreis">Stadt-/Landkreis</label>
       <select id="kreis"></select>
       <div class="stand" id="stand"></div>
     </section>
 
-    <section class="only-search only-new">
+    <section class="only-search only-new" data-fold="branchen">
       <div class="row-between">
         <label>Branchen</label>
         <span class="links"><a href="#" id="cats-all">alle</a> · <a href="#" id="cats-none">keine</a></span>
@@ -106,7 +108,7 @@
       <div id="cats" class="checklist cat-tree"></div>
     </section>
 
-    <section class="only-new">
+    <section class="only-new" data-fold="zeitraum">
       <label for="months">Zeitraum Neugründungen</label>
       <select id="months">
         <option value="3">letzte 3 Monate</option>
@@ -116,16 +118,23 @@
       </select>
     </section>
 
-    <section class="only-news">
+    <section class="only-news" data-fold="themen">
       <label>Themen</label>
       <div id="topics" class="checklist"></div>
     </section>
 
-    <section class="only-search only-new only-pipeline only-eigene">
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="filter">
       <label>Filter</label>
+      <input type="search" id="text" placeholder="Name, Ort, Straße …">
       <label class="check only-search only-new"><input type="checkbox" id="hide-chains" checked> Ketten/Filialen ausblenden</label>
       <label class="check only-search only-new"><input type="checkbox" id="need-contact"> nur mit Telefon/E-Mail/Website</label>
       <label class="check only-search only-new" title="Zusätzliche Betriebe aus Overture Maps mit geringer Sicherheit (z. B. veraltet oder ungenau)"><input type="checkbox" id="show-unsure"> auch unsichere Einträge zeigen</label>
+      <label class="check only-search only-new only-eigene" title="Betriebe mit gleicher Website (z. B. alle Kinderhäuser eines Trägers) nur einmal zeigen"><input type="checkbox" id="group-collapse"> Gruppen zusammenfassen</label>
+      <label class="check only-search only-new" title="Ausgeblendete Gruppen und Betriebe wieder anzeigen (dort lassen sie sich einblenden)"><input type="checkbox" id="show-hidden"> ausgeblendete zeigen</label>
+      <label class="check only-search only-new" title="Leads mit Status liegen in „Meine Pipeline“; hier lassen sie sich zusätzlich am Ende der Liste zeigen"><input type="checkbox" id="show-done"> auch Leads aus der Pipeline zeigen</label>
+    </section>
+
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="groesse">
       <label for="size-filter">Unternehmensgröße (geschätzt)</label>
       <select id="size-filter">
         <option value="">alle</option>
@@ -134,9 +143,10 @@
       </select>
       <label class="check" title="Grün: sucht Personal, Shop, Social Media, mehrere Standorte, gut erreichbar …"><input type="checkbox" id="only-green"> nur grüne Ampel</label>
       <label class="check"><input type="checkbox" id="hiring"> sucht Personal (laut Website)</label>
-      <label class="check only-search only-new only-eigene" title="Betriebe mit gleicher Website (z. B. alle Kinderhäuser eines Trägers) nur einmal zeigen"><input type="checkbox" id="group-collapse"> Gruppen zusammenfassen</label>
-      <label class="check only-search only-new" title="Ausgeblendete Gruppen und Betriebe wieder anzeigen (dort lassen sie sich einblenden)"><input type="checkbox" id="show-hidden"> ausgeblendete zeigen</label>
-      <label class="check only-search only-new" title="Leads mit Status liegen in „Meine Pipeline“; hier lassen sie sich zusätzlich am Ende der Liste zeigen"><input type="checkbox" id="show-done"> auch Leads aus der Pipeline zeigen</label>
+    </section>
+
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="website">
+      <label>Website, Gruppen, Firmensitz</label>
       <div class="filter-grid">
         <label>Website
           <select id="web-filter"><option value="">alle</option><option value="mit">mit Website</option><option value="ohne">ohne Website</option></select>
@@ -147,7 +157,11 @@
         <label title="Laut Impressum der Firmen-Website (wird nach und nach erfasst)">Firmensitz / Zentrale
           <select id="sitz-filter"><option value="">egal</option><option value="hier">im gewählten Kreis</option><option value="woanders">außerhalb</option><option value="bekannt">Impressum bekannt</option></select>
         </label>
-        <label>Sortieren nach
+      </div>
+    </section>
+
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="sortieren">
+      <label for="sort-by">Sortieren und Mindest-Score</label>
           <select id="sort-by">
             <option value="score">Score</option>
             <option value="ampel_pts">Ampel</option>
@@ -158,11 +172,11 @@
             <option value="city">Ort</option>
             <option value="category">Branche</option>
           </select>
-        </label>
-      </div>
-      <label for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
+      <label class="small" for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
-      <input type="search" id="text" placeholder="Name, Ort, Straße …">
+    </section>
+
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="salesforce">
       <label for="sfc-filter">Salesforce-Abgleich</label>
       <select id="sfc-filter">
         <option value="">alle</option>
@@ -181,7 +195,7 @@
       </select>
     </section>
 
-    <section class="only-search only-new only-pipeline only-eigene">
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="stroeer">
       <div class="row-between">
         <label>Ströer-Werbeträger</label>
         <span class="links"><a href="#" data-media="alle">alle</a> · <a href="#" data-media="keine">keine</a></span>
@@ -193,6 +207,10 @@
       </div>
       <div id="media" class="checklist"></div>
       <div class="stand" id="stroeer-info"></div>
+      <label class="check"><input type="checkbox" id="show-stroeer" checked> Ströer-Flächen in der Karte zeigen</label>
+    </section>
+
+    <section class="only-search only-new only-pipeline only-eigene" data-fold="umkreis">
       <label for="radius">Umkreis um den Betrieb</label>
       <select id="radius">
         <option value="250">250 m</option>
@@ -201,10 +219,9 @@
         <option value="2000">2 km</option>
       </select>
       <label class="check"><input type="checkbox" id="only-near"> nur Betriebe mit Ströer-Fläche im Umkreis</label>
-      <label class="check"><input type="checkbox" id="show-stroeer" checked> Ströer-Flächen in der Karte zeigen</label>
     </section>
 
-    <section class="only-pipeline only-eigene">
+    <section class="only-pipeline only-eigene" data-fold="sicherung">
       <label>Sicherung</label>
       <p class="hint">Eigene Leads, Status und Notizen werden nur in diesem Browser gespeichert. Sichere sie ab und zu als Datei.</p>
       <div class="backup">

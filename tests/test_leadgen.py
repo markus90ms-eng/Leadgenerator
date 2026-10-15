@@ -349,6 +349,27 @@ class WebExportTest(unittest.TestCase):
         self.assertEqual(webcheck.legal_form("Bäckerei Schmid"), "")
         self.assertEqual(webcheck.domain_of("https://www.Bickel-GmbH.de/kontakt"), "bickel-gmbh.de")
 
+    def test_webcheck_impressum_without_link_and_several_firms(self):
+        pages = {
+            "https://www.johanniter.de/": "<p>Willkommen bei den Johannitern</p>",  # Link nur per JavaScript
+            "https://www.johanniter.de/impressum/": (
+                "<h1>Impressum</h1><p>Beispiel Service GmbH<br>Hauptstraße 1<br>70173 Stuttgart</p>"
+                "<p>Johanniter-Unfall-Hilfe e.V.<br>Bundesgeschäftsstelle<br>Lützowstraße 94<br>10785 Berlin<br>"
+                "Telefon: 030 26997-0</p><p>Johanniter-Stiftung<br>Finckensteinallee 111<br>12205 Berlin</p>"),
+        }
+        sig = webcheck.check("https://www.johanniter.de/kitas/stuttgart", "2026-10-15",
+                             lambda url, timeout=10: (url, pages[url]) if url in pages else None)
+        imp = sig["imp"]
+        self.assertEqual((imp["f"], imp["p"], imp["o"], imp["s"]),
+                         ("Johanniter-Unfall-Hilfe e.V.", "10785", "Berlin", "Lützowstraße 94"))
+        self.assertEqual(imp["fx"], ["Beispiel Service GmbH"])
+        self.assertEqual(sig["v"], webcheck.VERSION)
+        # Startseite für jede Adresse (kein echtes Impressum) wird nicht als Impressum genommen
+        sig = webcheck.check("https://beispiel.de/", "2026-10-15",
+                             lambda url, timeout=10: (url, "<p>Willkommen</p>") if "robots" not in url else None)
+        self.assertNotIn("imp", sig)
+        self.assertTrue(webcheck.is_current({"v": 3}) and not webcheck.is_current({"v": 3}, strict=True))
+
     def test_overture_phone_and_merge(self):
         self.assertEqual(overture.norm_phone("04971 31570001"), "07131570001")
         self.assertEqual(overture.norm_phone("497131570001"), "07131570001")

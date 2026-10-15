@@ -280,12 +280,13 @@ def webcheck_targets(leads_by_kreis, cache, today, recheck_days=webcheck.RECHECK
             if not d or lead.get("chain") or lead.get("unsure") or lead.get("u"):
                 continue
             prev = cache.get(d)
-            if prev and webcheck.is_current(prev) and prev.get("d", "") > (retry if prev.get("err") else stale):
+            size = group_size[group_key(lead)] if group_key(lead) else 1
+            strict = size > 1  # Gruppen: Zentrale laut Impressum immer mit der neuesten Prüfung
+            if prev and webcheck.is_current(prev, strict) and prev.get("d", "") > (retry if prev.get("err") else stale):
                 continue
             weight = CATEGORIES.get(lead.get("category"), {}).get("weight", 20)
-            size = group_size[group_key(lead)] if group_key(lead) else 1
             # Gruppen zuerst (dort sitzt die Zentrale), dann wichtige Branchen
-            key = (prev.get("d", "") if prev and webcheck.is_current(prev) else "", -min(size, 50), -weight)
+            key = (prev.get("d", "") if prev and webcheck.is_current(prev, strict) else "", -min(size, 50), -weight)
             if d not in best or key < best[d][0]:
                 best[d] = (key, lead["website"])
     return [(d, url) for d, (key, url) in sorted(best.items(), key=lambda x: x[1][0])]
