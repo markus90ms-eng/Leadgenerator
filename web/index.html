@@ -136,6 +136,7 @@
       <label class="check"><input type="checkbox" id="hiring"> sucht Personal (laut Website)</label>
       <label class="check only-search only-new only-eigene" title="Betriebe mit gleicher Website (z. B. alle Kinderhäuser eines Trägers) nur einmal zeigen"><input type="checkbox" id="group-collapse"> Gruppen zusammenfassen</label>
       <label class="check only-search only-new" title="Ausgeblendete Gruppen und Betriebe wieder anzeigen (dort lassen sie sich einblenden)"><input type="checkbox" id="show-hidden"> ausgeblendete zeigen</label>
+      <label class="check only-search only-new" title="Leads mit Status liegen in „Meine Pipeline“; hier lassen sie sich zusätzlich am Ende der Liste zeigen"><input type="checkbox" id="show-done"> auch Leads aus der Pipeline zeigen</label>
       <div class="filter-grid">
         <label>Website
           <select id="web-filter"><option value="">alle</option><option value="mit">mit Website</option><option value="ohne">ohne Website</option></select>
@@ -162,7 +163,6 @@
       <label for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
       <input type="search" id="text" placeholder="Name, Ort, Straße …">
-      <select id="status-filter" class="only-pipeline"><option value="">Alle Status</option></select>
       <label for="sfc-filter">Salesforce-Abgleich</label>
       <select id="sfc-filter">
         <option value="">alle</option>
@@ -227,6 +227,7 @@
       </div>
     </div>
     <div id="map" hidden></div>
+    <div id="pipe-tabs" class="pipe-tabs"></div>
     <div id="status-msg" hidden></div>
     <div id="queue" hidden></div>
     <div id="results"></div>

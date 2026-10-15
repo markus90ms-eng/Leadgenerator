@@ -207,3 +207,8 @@ body.aside-hidden aside { display: none; }
 @media (max-width: 860px) { .aside-handle { display: none; } }
 .hide-btn { display: block; margin-top: 4px; padding: 3px 8px; font-size: 12px; color: var(--muted); }
 .near-box .hide-btn { display: inline-block; margin-left: 8px; }
+/* Pipeline-Unterreiter */
+.pipe-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.pipe-tabs button { border-radius: 16px; padding: 5px 12px; font-size: 13px; background: var(--panel); }
+.pipe-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.pipe-tabs .count { opacity: .75; font-variant-numeric: tabular-nums; margin-left: 2px; }

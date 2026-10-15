@@ -289,6 +289,8 @@ function focusOnMap(l) {
 // ---------- Setup ---------------------------------------------------------
 async function init() {
   state.pipeline = load("pipeline", {});
+  state.pipeTab = load("pipeTab", "alle");
+  updatePipeBadge();
   initEigene();
   initMail();
   try {
@@ -312,7 +314,6 @@ async function init() {
   renderCats(true);
   $("#topics").innerHTML = Object.values(state.meta.topics).map((name) =>
     `<label><input type="checkbox" value="${esc(name)}" checked> ${esc(name)}</label>`).join("");
-  for (const s of STATUSES) $("#status-filter").append(new Option(STATUS_LABELS[s], s));
 
   $("#cats-all").onclick = (e) => { e.preventDefault(); setAllCats(true); };
   $("#cats-none").onclick = (e) => { e.preventDefault(); setAllCats(false); };
@@ -322,7 +323,7 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse", "#web-filter", "#grp-filter", "#sitz-filter", "#show-hidden"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#show-done", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse", "#web-filter", "#grp-filter", "#sitz-filter", "#show-hidden"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
@@ -456,6 +457,7 @@ function switchTab(tab) {
   $("#toggle-map").hidden = tab === "news" || tab === "salesforce";
   $("#sfc-run").hidden = tab === "news" || tab === "salesforce";
   if (tab === "salesforce") $("#map").hidden = true;
+  $("#pipe-tabs").hidden = tab !== "pipeline";
   renderQueue();
   render();
   if (tab === "eigene") ensureOwnKreise().then(() => state.tab === "eigene" && render());
@@ -506,9 +508,8 @@ function message(text, loading = false) {
 function currentRows() {
   if (state.tab === "eigene") return Object.values(state.eigene).map((l) => enrich(l, monthsAgo(12)));
   if (state.tab === "pipeline") {
-    // "Kollege dran" gehört nicht in die eigene Pipeline (außer man filtert gezielt danach)
-    const wantKollege = $("#status-filter").value === "kollege";
-    return Object.entries(state.pipeline).filter(([, p]) => (p.status === "kollege") === wantKollege)
+    // Unterreiter: nur die Leads mit dem gewählten Status
+    return Object.entries(state.pipeline).filter(([, p]) => pipeTabMatches(p, state.pipeTab))
       .map(([id, p]) => enrich({ ...p.lead, id }, monthsAgo(12)));
   }
   const data = state.kreisData[$("#kreis").value];
@@ -527,12 +528,13 @@ function currentRows() {
 function filtered(rows) {
   const minScore = +$("#min-score").value;
   const text = $("#text").value.trim().toLowerCase();
-  const status = $("#status-filter").value;
   const pipe = state.tab === "pipeline" || state.tab === "eigene";
+  // Leads mit Status liegen in "Meine Pipeline" und verschwinden aus den Suchlisten
+  const listTab = state.tab === "search" || state.tab === "new";
   const out = rows.filter((l) =>
     (pipe || !$("#hide-chains").checked || !l.chain) &&
     (pipe || !$("#need-contact").checked || l.phone || l.email || l.website) &&
-    (state.tab !== "pipeline" || !status || l.status === status) &&
+    (!listTab || l.status === "neu" || $("#show-done").checked) &&
     (!$("#only-near").checked || l.near_count > 0) &&
     (!$("#size-filter").value || l.size_rank >= ($("#size-filter").value === "L" ? 3 : 2)) &&
     (!$("#only-green").checked || l.ampel === "g") &&
@@ -549,8 +551,8 @@ function filtered(rows) {
     const x = a[key] ?? "", y = b[key] ?? "";
     return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "de")) * dir;
   });
-  // Accounts, an denen ein Kollege dran ist, rutschen ans Ende
-  const sorted = state.tab === "pipeline" ? out : [...out.filter((l) => l.status !== "kollege"), ...out.filter((l) => l.status === "kollege")];
+  // Eingeblendete Leads mit Status ans Ende
+  const sorted = listTab ? [...out.filter((l) => l.status === "neu"), ...out.filter((l) => l.status !== "neu")] : out;
   return state.tab !== "pipeline" && $("#group-collapse")?.checked ? collapseGroups(sorted) : sorted;
 }
 
@@ -567,13 +569,15 @@ function render() {
       ? `<b>${rows.length}</b> eigene Leads`
       : "Noch keine eigenen Leads. Über „Fotos auswählen“ Bilder von Fahrzeug- oder Schildwerbung hochladen.";
   } else if (state.tab === "pipeline") {
+    renderPipeTabs();
     $("#summary").innerHTML = all.length
-      ? `<b>${rows.length}</b> Leads in deiner Pipeline`
-      : "Noch keine Leads gemerkt. Setze in der Firmensuche einen Status oder eine Notiz.";
+      ? `<b>${rows.length}</b> Leads · ${esc(PIPE_TABS.find(([k]) => k === state.pipeTab)?.[1] || "")}`
+      : Object.keys(state.pipeline).length ? "Hier liegt noch nichts." : "Noch keine Leads gemerkt. Setze in der Firmensuche einen Status oder eine Notiz.";
   } else {
     $("#summary").innerHTML = all.length
       ? `<b>${rows.length}</b> von ${all.length} Betrieben` + (neu ? ` · <b>${neu}</b> neu am Markt` : "")
         + (hiddenCount(all) && !$("#show-hidden").checked ? ` · ${hiddenCount(all)} ausgeblendet` : "")
+        + (doneCount(all) && !$("#show-done").checked ? ` · ${doneCount(all)} in deiner Pipeline` : "")
       : state.kreisData[$("#kreis").value] ? "Keine Betriebe – Branchen oder Zeitraum anpassen." : "";
   }
   if (!rows.length) {
@@ -672,6 +676,35 @@ function rowHtml(l) {
   </tr>`;
 }
 
+// ---------- Pipeline-Unterreiter -------------------------------------------
+const PIPE_TABS = [
+  ["alle", "Alle aktiven"], ["interessant", "Interessant"], ["kontaktiert", "Kontaktiert"], ["termin", "Termin"],
+  ["angebot", "Angebot"], ["kunde", "Kunde"], ["kein_interesse", "Kein Interesse"], ["kollege", "Kollege dran"],
+  ["notiz", "Nur Notiz"],
+];
+// "Alle aktiven": alles außer Kunde, Kein Interesse, Kollege
+const pipeTabMatches = (p, tab) => tab === "alle" ? !["kunde", "kein_interesse", "kollege", "neu"].includes(p.status)
+  : tab === "notiz" ? p.status === "neu" : p.status === tab;
+const doneCount = (rows) => rows.filter((l) => l.status !== "neu").length;
+
+function renderPipeTabs() {
+  const counts = Object.fromEntries(PIPE_TABS.map(([k]) => [k, Object.values(state.pipeline).filter((p) => pipeTabMatches(p, k)).length]));
+  $("#pipe-tabs").innerHTML = PIPE_TABS.filter(([k]) => counts[k] || k === "alle" || k === state.pipeTab).map(([k, label]) =>
+    `<button data-pipe="${k}" class="${state.pipeTab === k ? "active" : ""}">${label} <span class="count">${counts[k]}</span></button>`).join("");
+  document.querySelectorAll("#pipe-tabs [data-pipe]").forEach((b) => (b.onclick = () => {
+    state.pipeTab = b.dataset.pipe;
+    store("pipeTab", state.pipeTab);
+    state.limit = 200;
+    render();
+  }));
+}
+
+function updatePipeBadge() {
+  const b = document.querySelector('#tabs button[data-tab="pipeline"]');
+  const n = Object.values(state.pipeline).filter((p) => pipeTabMatches(p, "alle")).length;
+  if (b) b.textContent = n ? `Meine Pipeline (${n})` : "Meine Pipeline";
+}
+
 function save(lead, patch) {
   const { new_reason, score, score_reasons, status, notes, near, near_count, photo, ocr, verbund,
     size, size_rank, size_why, ampel: _a, ampel_pts, ampel_why, ...raw } = lead;
@@ -683,8 +716,16 @@ function save(lead, patch) {
   if (entry.status === "neu" && !entry.notes && !entry.contact) delete state.pipeline[key];
   else state.pipeline[key] = entry;
   store("pipeline", state.pipeline);
-  // "Kollege dran" sortiert die Liste um (Eintrag rutscht nach unten bzw. zurück)
-  if (state.tab === "pipeline" || state.tab === "eigene" || before === "kollege" || entry.status === "kollege") render();
+  updatePipeBadge();
+  // Neuer Status: Lead wandert aus der Liste in die Pipeline (bzw. dort in einen anderen Unterreiter)
+  if (patch.status && patch.status !== before) {
+    if (patch.status !== "neu" && state.tab !== "pipeline") {
+      message(`„${lead.gn || lead.name}“ liegt jetzt in „Meine Pipeline“ unter „${STATUS_LABELS[patch.status]}“.`, true);
+    }
+    render();
+  } else if (state.tab === "pipeline" || state.tab === "eigene") {
+    render();
+  }
 }
 
 function renderNews() {
