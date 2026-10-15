@@ -191,3 +191,7 @@ aside label.btn.sf-csv:hover { border-color: var(--accent); }
 .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; margin: 6px 0; }
 .filter-grid label { font-weight: 600; font-size: 12px; margin: 0; display: grid; gap: 2px; }
 .filter-grid select { font-size: 13px; padding: 5px 6px; }
+.folder-box { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.folder-box #folder-connect { width: 100%; font-weight: 600; }
+.folder-actions { display: flex; gap: 6px; margin-top: 6px; }
+.folder-actions button { font-size: 12px; padding: 5px 8px; }

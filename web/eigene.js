@@ -277,13 +277,15 @@ function contrastCopy(src, invert) {
   return c;
 }
 
-function addPhotos(files) {
-  for (const file of files) {
-    if (!file.type.startsWith("image/")) continue;
-    state.queue.push({ key: Math.random().toString(36).slice(2), file, status: "wait", progress: 0 });
-  }
+function addPhotos(files, { scroll = true, folderEntries = [] } = {}) {
+  files.forEach((file, i) => {
+    if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name)) return;
+    state.queue.push({ key: Math.random().toString(36).slice(2), file, status: "wait", progress: 0,
+      entry: folderEntries[i] || null, fileName: file.name });
+  });
   renderQueue();
-  $("#queue").scrollIntoView({ behavior: "smooth", block: "start" });
+  updateQueueBadge();
+  if (scroll && state.tab === "eigene") $("#queue").scrollIntoView({ behavior: "smooth", block: "start" });
   processQueue();
 }
 
@@ -329,7 +331,9 @@ async function processQueue() {
         job.error = err.message || String(err);
       }
       job.file = null;
+      if (job.entry) await moveToDone(job);
       renderQueue();
+      updateQueueBadge();
     }
   } finally {
     processing = false;
@@ -435,6 +439,7 @@ function jobHtml(job) {
 }
 
 function renderQueue() {
+  updateQueueBadge();
   const el = $("#queue");
   if (!el) return;
   el.hidden = state.tab !== "eigene" || !state.queue.length;
@@ -527,7 +532,136 @@ async function ensureOwnKreise() {
   state.nearIndex = null;
 }
 
+// ---------- Foto-Ordner auf dem PC (Edge/Chrome: File System Access API) ----
+// Neue Fotos werden beim Öffnen der Seite eingelesen und danach in den
+// Unterordner "eingelesen" verschoben. Der Ordner-Zugriff wird im Browser
+// gespeichert (IndexedDB), die Fotos verlassen den Rechner nicht.
+const FOLDER_DONE = "eingelesen";
+const IMAGE_RE = /\.(jpe?g|png|webp)$/i;
+const folder = { handle: null, busy: false, inFlight: new Set() };
+
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("leadgenerator", 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("kv");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction("kv", mode);
+      const req = fn(tx.objectStore("kv"));
+      tx.oncomplete = () => resolve(req?.result);
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+const idbGet = (key) => idb("readonly", (s) => s.get(key)).catch(() => null);
+const idbSet = (key, value) => idb("readwrite", (s) => (value === undefined ? s.delete(key) : s.put(value, key))).catch(() => {});
+
+function folderStatus(text) {
+  $("#folder-status").textContent = text;
+  $("#folder-actions").hidden = !folder.handle;
+  $("#folder-connect").textContent = folder.handle ? "📁 Anderen Ordner wählen" : "📁 Ordner verbinden";
+}
+
+async function folderPermission(ask) {
+  if (!folder.handle) return false;
+  const opts = { mode: "readwrite" };
+  if (await folder.handle.queryPermission(opts) === "granted") return true;
+  return ask ? (await folder.handle.requestPermission(opts)) === "granted" : false;
+}
+
+async function connectFolder() {
+  try {
+    folder.handle = await window.showDirectoryPicker({ id: "leadgen-fotos", mode: "readwrite" });
+  } catch (_) {
+    return; // abgebrochen
+  }
+  await idbSet("folder", folder.handle);
+  scanFolder(true);
+}
+
+async function disconnectFolder() {
+  folder.handle = null;
+  await idbSet("folder", undefined);
+  folderStatus("Kein Ordner verbunden.");
+}
+
+async function scanFolder(ask = false) {
+  if (!folder.handle || folder.busy) return;
+  if (!(await folderPermission(ask))) {
+    folderStatus(`Ordner „${folder.handle.name}“: Zugriff muss bestätigt werden – auf „Ordner jetzt prüfen“ klicken.`);
+    return;
+  }
+  folder.busy = true;
+  try {
+    const files = [], entries = [];
+    for await (const entry of folder.handle.values()) {
+      if (entry.kind !== "file" || !IMAGE_RE.test(entry.name) || folder.inFlight.has(entry.name)) continue;
+      folder.inFlight.add(entry.name);
+      files.push(await entry.getFile());
+      entries.push(entry);
+    }
+    const heic = [];
+    for await (const entry of folder.handle.values()) if (entry.kind === "file" && /\.hei[cf]$/i.test(entry.name)) heic.push(entry.name);
+    folderStatus(`Verbunden: „${folder.handle.name}“ · zuletzt geprüft ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
+      + (files.length === 1 ? " · 1 neues Foto" : files.length ? ` · ${files.length} neue Fotos` : " · keine neuen Fotos")
+      + (heic.length ? ` · ${heic.length} HEIC-Fotos können nicht gelesen werden (am iPhone: Einstellungen → Kamera → Formate → „Maximale Kompatibilität“)` : ""));
+    if (files.length) {
+      addPhotos(files, { scroll: false, folderEntries: entries });
+      message(`${files.length === 1 ? "1 neues Foto" : `${files.length} neue Fotos`} aus dem Ordner „${folder.handle.name}“ werden eingelesen – zur Prüfung im Reiter „Eigene Leads“.`, true);
+    }
+  } catch (err) {
+    folderStatus(`Ordner konnte nicht gelesen werden: ${err.message}`);
+  } finally {
+    folder.busy = false;
+  }
+}
+
+// Eingelesenes Foto in den Unterordner "eingelesen" verschieben (nicht löschen)
+async function moveToDone(job) {
+  try {
+    const done = await folder.handle.getDirectoryHandle(FOLDER_DONE, { create: true });
+    let name = job.fileName;
+    try { await done.getFileHandle(name); name = name.replace(/(\.\w+)$/, `_${Date.now()}$1`); } catch (_) { /* frei */ }
+    if (job.entry.move) {
+      try { await job.entry.move(done, name); job.moved = true; return; } catch (_) { /* Fallback unten */ }
+    }
+    const file = await job.entry.getFile();
+    const target = await done.getFileHandle(name, { create: true });
+    const out = await target.createWritable();
+    await out.write(file);
+    await out.close();
+    await folder.handle.removeEntry(job.fileName);
+    job.moved = true;
+  } catch (err) {
+    job.moveError = err.message;
+  } finally {
+    folder.inFlight.delete(job.fileName);
+  }
+}
+
+function updateQueueBadge() {
+  const btn = document.querySelector('#tabs button[data-tab="eigene"]');
+  if (!btn) return;
+  const open = state.queue.length;
+  btn.textContent = open ? `Eigene Leads (${open})` : "Eigene Leads";
+}
+
+async function initFolder() {
+  if (!window.showDirectoryPicker) {
+    $("#folder-box").hidden = true;
+    return;
+  }
+  $("#folder-connect").onclick = connectFolder;
+  $("#folder-scan").onclick = () => scanFolder(true);
+  $("#folder-disconnect").onclick = disconnectFolder;
+  folder.handle = await idbGet("folder");
+  if (!folder.handle) return folderStatus("Kein Ordner verbunden.");
+  await scanFolder(false);
+  setInterval(() => document.visibilityState === "visible" && scanFolder(false), 10 * 60 * 1000);
+}
+
 function initEigene() {
+  initFolder();
   state.eigene = load("eigene", {});
   const input = $("#photo-input");
   input.onchange = () => { addPhotos([...input.files]); input.value = ""; };
