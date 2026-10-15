@@ -277,11 +277,11 @@ function contrastCopy(src, invert) {
   return c;
 }
 
-function addPhotos(files, { scroll = true, folderEntries = [], onRead = null } = {}) {
+function addPhotos(files, { scroll = true, folderEntries = [] } = {}) {
   files.forEach((file, i) => {
     if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name)) return;
     state.queue.push({ key: Math.random().toString(36).slice(2), file, status: "wait", progress: 0,
-      entry: folderEntries[i] || null, fileName: file.name, onRead: onRead ? onRead[i] : null });
+      entry: folderEntries[i] || null, fileName: file.name });
   });
   renderQueue();
   updateQueueBadge();
@@ -332,7 +332,6 @@ async function processQueue() {
       }
       job.file = null;
       if (job.entry) await moveToDone(job);
-      if (job.onRead) await job.onRead(job).catch((err) => (job.moveError = err.message));
       renderQueue();
       updateQueueBadge();
     }
@@ -663,7 +662,6 @@ async function initFolder() {
 
 function initEigene() {
   initFolder();
-  initDrive();
   state.eigene = load("eigene", {});
   const input = $("#photo-input");
   input.onchange = () => { addPhotos([...input.files]); input.value = ""; };
@@ -671,167 +669,4 @@ function initEigene() {
   drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
   drop.ondragleave = () => drop.classList.remove("over");
   drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); addPhotos([...e.dataTransfer.files]); };
-}
-
-// ---------- Google-Drive-Ordner ------------------------------------------
-// Anmeldung über Google Identity Services im Browser; die Fotos gehen direkt
-// von Drive in diesen Browser. Eingelesene Fotos werden im Drive in den
-// Unterordner "eingelesen" verschoben. Benötigt eine eigene OAuth-Client-ID.
-const DRIVE_API = "https://www.googleapis.com/drive/v3";
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
-const drive = { busy: false, inFlight: new Set(), doneFolder: null };
-
-function driveConfig() {
-  return { client: load("driveClient", ""), folder: load("driveFolder", "") };
-}
-
-function driveFolderId(link) {
-  const m = String(link).match(/folders\/([\w-]{10,})/) || String(link).match(/[?&]id=([\w-]{10,})/) || String(link).match(/^([\w-]{20,})$/);
-  return m ? m[1] : "";
-}
-
-function driveStatus(text) {
-  const cfg = driveConfig();
-  $("#drive-status").textContent = text;
-  $("#drive-actions").hidden = !(cfg.client && cfg.folder);
-  $("#drive-connect").hidden = !!(cfg.client && cfg.folder);
-}
-
-function cachedToken() {
-  try {
-    const t = JSON.parse(sessionStorage.getItem("leadgen:driveToken") || "null");
-    return t && t.exp > Date.now() + 60000 ? t.token : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function driveToken(interactive) {
-  const cached = cachedToken();
-  if (cached || !interactive) return cached;
-  const { client } = driveConfig();
-  if (!window.google?.accounts?.oauth2) await loadScript("https://accounts.google.com/gsi/client");
-  const resp = await new Promise((resolve, reject) => {
-    const tc = google.accounts.oauth2.initTokenClient({
-      client_id: client,
-      scope: DRIVE_SCOPE,
-      prompt: load("driveConsented", false) ? "" : "consent",
-      callback: (r) => (r.error ? reject(new Error(r.error_description || r.error)) : resolve(r)),
-      error_callback: (e) => reject(new Error(e.type === "popup_closed" ? "Anmeldefenster geschlossen" : e.message || e.type)),
-    });
-    tc.requestAccessToken();
-  });
-  store("driveConsented", true);
-  try {
-    sessionStorage.setItem("leadgen:driveToken", JSON.stringify({ token: resp.access_token, exp: Date.now() + (resp.expires_in || 3600) * 1000 }));
-  } catch (_) { /* egal */ }
-  return resp.access_token;
-}
-
-async function driveFetch(token, path, opts = {}) {
-  const res = await fetch(path.startsWith("http") ? path : DRIVE_API + path, {
-    ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
-  });
-  if (res.status === 401) {
-    try { sessionStorage.removeItem("leadgen:driveToken"); } catch (_) {}
-    throw new Error("Anmeldung abgelaufen – bitte „Drive jetzt prüfen“ klicken");
-  }
-  if (!res.ok) throw new Error(`Google Drive: ${res.status} ${(await res.text()).slice(0, 160)}`);
-  return res;
-}
-
-async function driveDoneFolder(token, parent) {
-  if (drive.doneFolder?.parent === parent) return drive.doneFolder.id;
-  const q = encodeURIComponent(`'${parent}' in parents and name = 'eingelesen' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-  const found = await (await driveFetch(token, `/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`)).json();
-  let id = found.files?.[0]?.id;
-  if (!id) {
-    const created = await (await driveFetch(token, "/files?supportsAllDrives=true", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "eingelesen", mimeType: "application/vnd.google-apps.folder", parents: [parent] }),
-    })).json();
-    id = created.id;
-  }
-  drive.doneFolder = { parent, id };
-  return id;
-}
-
-async function scanDrive(interactive = false) {
-  const cfg = driveConfig();
-  const folderId = driveFolderId(cfg.folder);
-  if (!cfg.client || !folderId || drive.busy) return;
-  drive.busy = true;
-  try {
-    const token = await driveToken(interactive);
-    if (!token) {
-      driveStatus("Google Drive: zum Einlesen einmal auf „Drive jetzt prüfen“ klicken (Anmeldung gilt eine Stunde).");
-      return;
-    }
-    driveStatus("Google Drive wird geprüft …");
-    const q = encodeURIComponent(`'${folderId}' in parents and trashed = false and mimeType contains 'image/'`);
-    const list = await (await driveFetch(token, `/files?q=${q}&fields=files(id,name,mimeType)&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`)).json();
-    const items = (list.files || []).filter((f) => !drive.inFlight.has(f.id));
-    const heic = items.filter((f) => /hei[cf]/i.test(f.mimeType) || /\.hei[cf]$/i.test(f.name));
-    const usable = items.filter((f) => !heic.includes(f));
-    const files = [], hooks = [];
-    for (const f of usable) {
-      drive.inFlight.add(f.id);
-      const blob = await (await driveFetch(token, `/files/${f.id}?alt=media&supportsAllDrives=true`)).blob();
-      files.push(new File([blob], f.name, { type: f.mimeType || blob.type }));
-      hooks.push(async () => {
-        try {
-          const t = await driveToken(false) || token;
-          const done = await driveDoneFolder(t, folderId);
-          await driveFetch(t, `/files/${f.id}?addParents=${done}&removeParents=${folderId}&supportsAllDrives=true`, { method: "PATCH" });
-        } finally {
-          drive.inFlight.delete(f.id);
-        }
-      });
-    }
-    driveStatus(`Google Drive verbunden · zuletzt geprüft ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`
-      + (files.length === 1 ? " · 1 neues Foto" : files.length ? ` · ${files.length} neue Fotos` : " · keine neuen Fotos")
-      + (heic.length ? ` · ${heic.length === 1 ? "1 HEIC-Foto kann" : `${heic.length} HEIC-Fotos können`} nicht gelesen werden (am iPhone: Einstellungen → Kamera → Formate → „Maximale Kompatibilität“)` : ""));
-    if (files.length) {
-      addPhotos(files, { scroll: false, onRead: hooks });
-      message(`${files.length === 1 ? "1 neues Foto" : `${files.length} neue Fotos`} aus Google Drive werden eingelesen – zur Prüfung im Reiter „Eigene Leads“.`, true);
-    }
-  } catch (err) {
-    driveStatus(`Google Drive: ${err.message}`);
-  } finally {
-    drive.busy = false;
-  }
-}
-
-function showDriveSetup(show) {
-  const cfg = driveConfig();
-  $("#drive-setup").hidden = !show;
-  $("#drive-client").value = cfg.client;
-  $("#drive-folder").value = cfg.folder;
-}
-
-function initDrive() {
-  $("#drive-connect").onclick = () => showDriveSetup($("#drive-setup").hidden);
-  $("#drive-settings").onclick = () => showDriveSetup($("#drive-setup").hidden);
-  $("#drive-scan").onclick = () => scanDrive(true);
-  $("#drive-disconnect").onclick = () => {
-    ["driveClient", "driveFolder", "driveConsented"].forEach((k) => store(k, ""));
-    try { sessionStorage.removeItem("leadgen:driveToken"); } catch (_) {}
-    showDriveSetup(false);
-    driveStatus("Google Drive nicht verbunden.");
-  };
-  $("#drive-save").onclick = () => {
-    const client = $("#drive-client").value.trim();
-    const folderLink = $("#drive-folder").value.trim();
-    if (!/\.apps\.googleusercontent\.com$/.test(client)) return driveStatus("Die Client-ID endet auf „.apps.googleusercontent.com“ – bitte prüfen.");
-    if (!driveFolderId(folderLink)) return driveStatus("Bitte den Link zum Drive-Ordner einfügen (…/folders/…).");
-    store("driveClient", client);
-    store("driveFolder", folderLink);
-    showDriveSetup(false);
-    scanDrive(true);
-  };
-  const cfg = driveConfig();
-  if (!cfg.client || !cfg.folder) return driveStatus("Google Drive nicht verbunden.");
-  driveStatus("Google Drive verbunden.");
-  scanDrive(false);
-  setInterval(() => document.visibilityState === "visible" && cachedToken() && scanDrive(false), 10 * 60 * 1000);
 }

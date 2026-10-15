@@ -12,7 +12,6 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 - **Pitch mit Claude** – Knopf pro Betrieb öffnet claude.ai mit einer fertigen Anfrage (Firmendaten, Ströer-Flächen in der Nähe, Gesprächsleitfaden); Claude sieht sich die Website an und schreibt einen individuellen Telefonpitch inkl. Einwandbehandlung.
 - **Eigene Leads aus Fotos** – Fotos von Fahrzeug-, Schild- oder Plakatwerbung hochladen (auch mehrere, am Handy direkt aus Kamera/Galerie). Die Texterkennung läuft im Browser, erkennt Telefonnummer, Website, E-Mail und Firmenname und gleicht sie mit allen Betrieben in BW ab. Nach kurzer Prüfung wird daraus ein Lead mit Ströer-Flächen, Score, Pipeline und Pitch-Knopf. Die Fotos bleiben auf dem Gerät.
 - **Foto-Ordner (Edge/Chrome am PC)** – im Reiter Eigene Leads „Ordner verbinden“: neue Fotos aus dem Ordner werden beim Öffnen der Seite (und alle 10 Minuten, solange sie offen ist) automatisch eingelesen und danach in den Unterordner „eingelesen“ verschoben.
-- **Google-Drive-Ordner** – im Reiter Eigene Leads „Google Drive verbinden“: Fotos aus einem Drive-Ordner (z. B. vom Handy hochgeladen) werden beim Öffnen der Seite eingelesen und im Drive in den Unterordner „eingelesen“ verschoben. Einrichtung siehe unten.
 - **Größe & Ampel** – geschätzte Unternehmensgröße (S/M/L) aus Rechtsform, Anzahl Standorte und Website-Angaben; Ampel (grün/gelb/rot) aus Aktivitätssignalen wie „sucht Personal“, Online-Shop, Social Media. Filter „ab mittel“, „nur grün“, „sucht Personal“. Edeka, Rewe & Co. zählen als Händlerverbund (oft selbstständige Kaufleute), nicht als Kette.
 - **Website-Check** – jede Nacht werden bis zu 15.000 Firmen-Websites geprüft (Startseite, Impressum, Karriereseite; robots.txt wird beachtet, keine Personendaten). Nach etwa zwei bis drei Wochen sind alle Websites einmal erfasst, danach wird alle 90 Tage aufgefrischt.
 - **Gruppen** – Betriebe mit gleicher Firmen-Website (z. B. alle Kinderhäuser eines Trägers) werden über alle Kreise als Gruppe erkannt: Abzeichen mit Anzahl Standorte, aufklappbare Liste mit vermuteter Zentrale, Schalter „Gruppen zusammenfassen“. Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.
@@ -75,17 +74,3 @@ Alle Leads, Status und Notizen liegen nur lokal in `leads.db` bzw. im Browser. G
 ```
 python -m unittest discover -s tests
 ```
-
-## Google Drive einrichten (einmalig, kostenlos)
-
-Damit die Seite auf einen Drive-Ordner zugreifen darf, braucht sie eine eigene „Client-ID“ von Google:
-
-1. https://console.cloud.google.com öffnen (mit dem Google-Konto, dem der Ordner gehört) → oben **Projekt auswählen → Neues Projekt**, Name z. B. „Leadgenerator“ → Erstellen.
-2. **APIs & Dienste → Bibliothek** → „Google Drive API“ suchen → **Aktivieren**.
-3. **Google Auth Platform** (bzw. „OAuth-Zustimmungsbildschirm“) → **Jetzt starten**: App-Name „Leadgenerator“, Support-E-Mail = eigene Adresse, Zielgruppe **Extern**, Kontakt-E-Mail eintragen, zustimmen → Erstellen.
-4. Unter **Zielgruppe → Testnutzer** die eigene Gmail-Adresse hinzufügen.
-5. **Clients → Client erstellen**: Anwendungstyp **Webanwendung**, Name „Leadgenerator“, unter **Autorisierte JavaScript-Quellen** `https://markus90ms-eng.github.io` eintragen → Erstellen → **Client-ID kopieren** (endet auf `.apps.googleusercontent.com`).
-6. Im Leadgenerator: **Eigene Leads → Google Drive verbinden** → Client-ID und den Link zum Drive-Ordner einfügen → **Speichern & verbinden**.
-7. Google zeigt „Google hat diese App nicht überprüft“ → **Erweitert → Zu Leadgenerator wechseln** → Zugriff erlauben. (Die App ist nur für dich als Testnutzer freigegeben.)
-
-Die Anmeldung gilt jeweils eine Stunde; danach genügt ein Klick auf „Drive jetzt prüfen“. Die Fotos werden nur von Drive in den eigenen Browser geladen und nirgends veröffentlicht.
