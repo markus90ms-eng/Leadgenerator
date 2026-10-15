@@ -611,6 +611,7 @@ function filtered(rows) {
     sitzMatches(l, $("#sitz-filter").value) &&
     ($("#show-hidden").checked || !isHidden(l)) &&
     sfcMatches(l) &&
+    sfsMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
   const { key, dir } = state.sort;
@@ -661,6 +662,7 @@ function render() {
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
   const body = rows.slice(0, state.limit).map((l) =>
     rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")
+    + (state.openSf.has(l.id) ? sfsDetailHtml(l, cols.length) : "")
     + (l.grp && state.openGroup === l.id ? groupDetailHtml(l, cols.length) : "")).join("");
   $("#results").innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
     ${rows.length > state.limit ? `<div class="more"><button id="more">Weitere ${Math.min(200, rows.length - state.limit)} anzeigen</button></div>` : ""}</div>`;
@@ -720,7 +722,7 @@ function rowHtml(l) {
   const osm = osmId.startsWith("osm:") ? `https://www.openstreetmap.org/${osmId.slice(4)}` : "";
   const hideLabel = isHidden(l) ? "Einblenden" : l.grp ? "Gruppe ausblenden" : "Ausblenden";
   return `<tr class="row-main">
-    <td>${scoreAmpelHtml(l)}</td>
+    <td>${scoreAmpelHtml(l)}${sfsDot(l)}</td>
     <td class="name">${l.photo ? `<img class="thumb" src="${l.photo}" alt="">` : ""}${esc(l.name)}<div class="sub">${esc(l.kind)}</div>${badges}</td>
     <td>${esc(catName(l.category))}${state.tab === "pipeline" || state.tab === "eigene" ? `<div class="sub">${esc(kreisName(l.kreis))}</div>` : ""}</td>
     <td>${esc(l.address) || `<span class="sub">–</span>`}</td>

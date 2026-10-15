@@ -250,3 +250,8 @@ tr.row-acts td { padding: 2px 10px 10px; }
 td.status-note select { width: 140px; min-width: 0; }
 td.status-note textarea { display: block; width: 140px; min-width: 0; min-height: 30px; height: 30px; margin-top: 4px; padding: 5px 8px; }
 td.status-note textarea:focus { height: 70px; }
+
+.sfs-dot { width: 20px; height: 20px; padding: 0; margin: 5px auto 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 0; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; background: #8a93a3; }
+.sfs-dot.g { background: #1f7a3d; } .sfs-dot.y { background: #e0a100; } .sfs-dot.r { background: #b3261e; } .sfs-dot.n { background: #8a93a3; }
+.sfs-table { border-collapse: collapse; font-size: 13px; margin-top: 6px; } .sfs-table td { padding: 2px 14px 2px 0; vertical-align: top; } .sfs-table td:first-child { color: var(--muted); }
+.sfs-good { color: var(--good); } .sfs-bad { color: var(--bad, #b3261e); }

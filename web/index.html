@@ -177,7 +177,16 @@
     </section>
 
     <section class="only-search only-new only-pipeline only-eigene" data-fold="salesforce">
-      <label for="sfc-filter">Salesforce-Abgleich</label>
+      <label for="sfs-filter">Salesforce</label>
+      <select id="sfs-filter" title="Abgleich mit dem lokalen Salesforce-Scan (Adresse, dann Name)">
+        <option value="">alle</option>
+        <option value="nein">nicht in Salesforce</option>
+        <option value="ja">in Salesforce</option>
+        <option value="frei">frei: letzter Kontakt über 3 Monate</option>
+        <option value="kuerzlich">kürzlich kontaktiert</option>
+        <option value="gesperrt">gesperrt</option>
+      </select>
+      <label for="sfc-filter">Live-Abgleich</label>
       <select id="sfc-filter">
         <option value="">alle</option>
         <option value="frei3m">frei: nicht gesperrt, letzter Kontakt über 3 Monate her</option>
@@ -291,5 +300,6 @@
 <script src="salesforce.js"></script>
 <script src="sfcheck.js"></script>
 <script src="app.js"></script>
+<script src="sfscan.js"></script>
 </body>
 </html>
