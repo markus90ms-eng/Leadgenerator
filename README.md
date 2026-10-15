@@ -79,3 +79,4 @@ python -m unittest discover -s tests
 - **Score-Kreis**: Zahl = Score, Farbe = Ampel (grün/gelb/rot), Buchstabe = geschätzte Größe; beim Darüberfahren stehen alle Gründe.
 - **Knopfleiste unter jedem Betrieb**: Pitch · Mail | Karte · Google · North Data · Jobs | Ausblenden.
 - **Filterleiste**: jeder Bereich lässt sich auf- und zuklappen („alle auf · alle zu“); ein Punkt zeigt, wo ein Filter aktiv ist.
+- **Eigene Leads ↔ Firmensuche**: Beim Öffnen von „Eigene Leads“ wird jeder eigene Lead mit der Firmensuche abgeglichen (Telefon, Website, E-Mail oder Name + PLZ). Bei einem Treffer kommen die aktuellen Daten dazu (Kontakt, Branche, Website-Check, Impressum, Gruppe, Ströer-Flächen), Foto und erkannter Text bleiben. Status und Notiz gelten für beide Einträge; in der Firmensuche zeigt „📷 Eigener Lead“, dass der Betrieb schon da ist.
