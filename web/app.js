@@ -443,7 +443,7 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["eigene", "search", "new", "news", "pipeline", "salesforce"].includes(startTab) ? startTab : "search");
+  switchTab(["eigene", "search", "new", "news", "pipeline"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
@@ -524,9 +524,7 @@ function switchTab(tab) {
     el.hidden = !el.classList.contains("only-" + tab);
   });
   $("#export").hidden = tab === "news";
-  $("#toggle-map").hidden = tab === "news" || tab === "salesforce";
-  $("#sfc-run").hidden = tab === "news" || tab === "salesforce";
-  if (tab === "salesforce") $("#map").hidden = true;
+  $("#toggle-map").hidden = tab === "news";
   $("#pipe-tabs").hidden = tab !== "pipeline";
   renderQueue();
   render();
@@ -615,7 +613,6 @@ function filtered(rows) {
     (!$("#grp-filter").value || ($("#grp-filter").value === "gruppe") === !!l.grp) &&
     sitzMatches(l, $("#sitz-filter").value) &&
     ($("#show-hidden").checked || !isHidden(l)) &&
-    sfcMatches(l) &&
     sfsMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
@@ -633,7 +630,6 @@ function render() {
   if (!state.meta) return;
   updateFoldDots();
   if (state.tab === "news") return renderNews();
-  if (state.tab === "salesforce") return renderSalesforce();
   const all = currentRows();
   const rows = filtered(all);
   state.visible = rows;
@@ -720,7 +716,6 @@ function rowHtml(l, ownIds = ownMatchIds()) {
     l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
     l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
     state.tab === "eigene" ? ownSyncBadge(l) : ownIds.has(l.id) ? `<span class="badge foto" title="Du hast diesen Betrieb auch unter „Eigene Leads“ (Foto); Status und Notiz gelten für beide">📷 Eigener Lead</span>` : "",
-    sfcBadge(l),
     groupBadge(l),
     impressumBadge(l),
   ].join("");
@@ -916,7 +911,6 @@ function download(name, content, type) {
 }
 
 function exportCsv() {
-  if (state.tab === "salesforce") return exportSalesforce();
   const rows = state.visible || [];
   if (!rows.length) return message("Keine Daten zum Exportieren.");
   const fields = [

@@ -20,10 +20,24 @@ function sfsAddr(a) {
   return { plz, key, nr };
 }
 
+// Lokales Programm (salesforce-bot/server.py) liefert den Bestandsscan
+const SFS_API = "http://127.0.0.1:8766";
+async function sfsCall(path) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch(SFS_API + path, { signal: ctl.signal, cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function sfsLoad(force) {
   if (sfs.loading || (!force && Date.now() - sfs.loadedAt < 60000)) return;
   sfs.loading = true;
-  sfcCall("/scan").then((d) => {
+  sfsCall("/scan").then((d) => {
     sfs.rows = d.rows || [];
     sfs.idx = {};
     sfs.cache = {};
