@@ -1,6 +1,6 @@
 """Liest Betriebe aller Kreise aus einem OSM-Datenabzug (.osm.pbf von Geofabrik).
 
-Robuster als einzelne Overpass-Abfragen: eine Datei, ein Durchlauf, alle 44
+Robuster als einzelne Overpass-Abfragen: eine Datei, ein Durchlauf, alle 41
 Kreise. Benötigt die Pakete `osmium` (pyosmium) und `shapely`.
 """
 

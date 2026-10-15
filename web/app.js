@@ -380,6 +380,7 @@ async function init() {
     kreisSel.append(og);
   }
   kreisSel.value = load("kreis", "08111");
+  if (!kreisSel.value) kreisSel.value = "08111"; // gemerkter Kreis gehört nicht mehr zum Gebiet
 
   renderCats(true);
   $("#topics").innerHTML = Object.values(state.meta.topics).map((name) =>
