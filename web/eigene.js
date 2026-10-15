@@ -524,7 +524,7 @@ async function keepJob(key, button) {
   const lead = {
     ...base,
     id: job.match ? `own:${job.match}` : `own:${Date.now().toString(36)}${key.slice(0, 4)}`,
-    match: job.match || "",
+    match: job.match || "", fs: job.match ? 1 : 0,
     name: f.name.trim(), category: f.category, kreis: f.kreis, address: f.address.trim(),
     phone: f.phone.trim(), website: f.website.trim(), email: f.email.trim(),
     photo: job.thumb, ocr: (job.text || "").slice(0, 600), created: new Date().toISOString().slice(0, 10),
@@ -567,6 +567,74 @@ async function ensureOwnKreise() {
     state.stroeerData[ags] = await getJson(`data/stroeer/${ags}.json`).catch(() => ({ items: [] }));
   }));
   state.nearIndex = null;
+}
+
+// ---------- Abgleich eigener Leads mit der Firmensuche ----------------------
+// Beim Öffnen von "Eigene Leads": Treffer in der Firmensuche (Telefon, Website,
+// E-Mail oder Name + PLZ) liefern die aktuellen Daten; Foto und Text bleiben.
+const OWN_KEEP = ["id", "match", "photo", "ocr", "created", "fs_new"];
+let ownSync = null;
+
+function ownFound(own, meta) {
+  const plz = (own.address || "").match(/\b(\d{5})\b/)?.[1] || "";
+  const email = String(own.email || "").toLowerCase();
+  return {
+    phones: [normPhone(own.phone || "")].filter(Boolean),
+    domains: [...new Set([normDomain(own.website || ""), normDomain(email)].filter(Boolean))],
+    emails: email ? [email] : [], names: [own.name], address: own.address || "", plz, ort: own.city || "",
+    kreis: own.kreis || meta.plz?.[plz]?.[0] || "",
+  };
+}
+
+function mergeOwn(own, lead) {
+  const merged = { ...lead };
+  for (const k of ["name", "category", "address", "phone", "email", "website", "city", "lat", "lon"]) {
+    if ((merged[k] === undefined || merged[k] === "" || merged[k] === null) && own[k] != null && own[k] !== "") merged[k] = own[k];
+  }
+  for (const k of OWN_KEEP) if (own[k] !== undefined) merged[k] = own[k];
+  delete merged.first_seen;
+  merged.fs = 1;
+  return merged;
+}
+
+function syncOwnWithSearch() {
+  if (ownSync) return ownSync;
+  ownSync = (async () => {
+    const own = Object.values(state.eigene);
+    if (!own.length) return 0;
+    message(`Gleiche ${own.length} eigene Leads mit der Firmensuche ab …`, true);
+    const meta = await getSearchMeta();
+    const today = new Date().toISOString().slice(0, 10);
+    let found = 0;
+    for (const o of own) {
+      try {
+        let lead = o.match ? await fetchLead({ id: o.match, kreis: o.kreis }) : null;
+        if (!lead) {
+          const f = ownFound(o, meta);
+          const ix = await loadShards(hintedKreise(f, meta));
+          const c = findCandidates(ix, f, o.name).find((x) => x.sure);
+          lead = c ? await fetchLead(c) : null;
+          if (lead) {
+            if (!o.match || o.match !== c.id) found++;
+            if (!o.match) o.fs_new = today;
+            o.match = c.id;
+          }
+        }
+        const next = lead ? mergeOwn(o, lead) : { ...o, fs: 0 };
+        // Status/Notiz aus der Zeit vor dem Abgleich unter dem gemeinsamen Schlüssel ablegen
+        if (next.match && state.pipeline[o.id] && !state.pipeline[next.match] && !(next.grp && state.pipeline["grp:" + next.grp])) {
+          state.pipeline[next.grp ? "grp:" + next.grp : next.match] = state.pipeline[o.id];
+          delete state.pipeline[o.id];
+          store("pipeline", state.pipeline);
+        }
+        state.eigene[o.id] = next;
+      } catch (_) { /* Daten nicht erreichbar – beim nächsten Mal wieder */ }
+    }
+    storeEigene();
+    message(found ? `${found} eigene Leads in der Firmensuche gefunden – Daten übernommen.` : "", !!found);
+    return found;
+  })().finally(() => { ownSync = null; });
+  return ownSync;
 }
 
 // ---------- Foto-Ordner auf dem PC (Edge/Chrome: File System Access API) ----

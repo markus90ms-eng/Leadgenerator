@@ -86,8 +86,11 @@ const VERBUND = /\b(edeka|e-?center|marktkauf|rewe|nahkauf|nah\s*(?:&|und)\s*gut
 const isVerbund = (l) => VERBUND.test(`${l.brand || ""} ${l.name || ""}`);
 
 // Pipeline-Eintrag eines Betriebs – bei Gruppen gilt der Eintrag der ganzen Gruppe
-const pipeKey = (l) => (l.grp ? "grp:" + l.grp : l.id);
-const pipeEntry = (l) => (l.grp && state.pipeline["grp:" + l.grp]) || state.pipeline[l.id];
+// Eigene Leads mit Treffer in der Firmensuche teilen sich den Eintrag mit diesem Betrieb
+const pipeKey = (l) => (l.grp ? "grp:" + l.grp : l.match || l.id);
+const pipeEntry = (l) => (l.grp && state.pipeline["grp:" + l.grp]) || (l.match && state.pipeline[l.match]) || state.pipeline[l.id];
+// Betriebe der Firmensuche, die auch als eigener Lead (Foto) vorliegen
+const ownMatchIds = () => new Set(Object.values(state.eigene).map((o) => o.match).filter(Boolean));
 
 function enrich(l, since) {
   // Verbund-Märkte: gemeinsame Website (z. B. edeka.de) sagt nichts über eigene Standorte
@@ -527,7 +530,9 @@ function switchTab(tab) {
   $("#pipe-tabs").hidden = tab !== "pipeline";
   renderQueue();
   render();
-  if (tab === "eigene") ensureOwnKreise().then(() => state.tab === "eigene" && render());
+  if (tab === "eigene") {
+    syncOwnWithSearch().catch(() => {}).then(ensureOwnKreise).then(() => state.tab === "eigene" && render());
+  }
 }
 
 async function loadKreis() {
@@ -660,8 +665,9 @@ function render() {
   ];
   const head = cols.map(([k, label]) =>
     `<th ${k ? `data-sort="${k}"` : ""}>${label}${state.sort.key === k ? (state.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
+  const ownIds = ownMatchIds();
   const body = rows.slice(0, state.limit).map((l) =>
-    rowHtml(l) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")
+    rowHtml(l, ownIds) + (state.openNear.has(l.id) && l.near?.count ? nearDetailHtml(l, cols.length) : "")
     + (state.openSf.has(l.id) ? sfsDetailHtml(l, cols.length) : "")
     + (l.grp && state.openGroup === l.id ? groupDetailHtml(l, cols.length) : "")).join("");
   $("#results").innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
@@ -698,7 +704,14 @@ function fmtPhone(p) {
   return p.slice(0, n) + " " + p.slice(n);
 }
 
-function rowHtml(l) {
+function ownSyncBadge(l) {
+  if (l.fs === undefined) return "";
+  if (!l.fs) return `<span class="badge chain" title="Noch nicht in der Firmensuche gefunden – wird beim nächsten Öffnen wieder geprüft">nur eigener Lead</span>`;
+  const fresh = l.fs_new && (Date.now() - new Date(l.fs_new)) < 7 * 864e5;
+  return `<span class="badge new" title="Daten aus der Firmensuche übernommen (Website-Check, Impressum, Gruppe …)">✓ in Firmensuche${fresh ? " – jetzt gefunden" : ""}</span>`;
+}
+
+function rowHtml(l, ownIds = ownMatchIds()) {
   const badges = [
     l.new_reason ? `<span class="badge ${l.new_reason === "Neu im Scan" ? "fresh" : "new"}">${esc(l.new_reason)}${l.start_date ? " " + fmtDate(l.start_date) : l.new_reason === "Neu im Scan" ? " " + fmtDate(l.first_seen) : ""}</span>` : "",
     l.photo ? `<span class="badge foto">Eigenes Foto${l.created ? " " + fmtDate(l.created) : ""}</span>` : "",
@@ -706,6 +719,7 @@ function rowHtml(l) {
     l.verbund ? `<span class="badge pt" title="Marke eines Händlerverbunds – die Märkte werden oft von selbstständigen Kaufleuten geführt, die selbst über Werbung entscheiden">Verbund: oft selbstständig</span>` : "",
     l.pt ? `<span class="badge pt">${esc(l.pt)}</span>` : "",
     l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
+    state.tab === "eigene" ? ownSyncBadge(l) : ownIds.has(l.id) ? `<span class="badge foto" title="Du hast diesen Betrieb auch unter „Eigene Leads“ (Foto); Status und Notiz gelten für beide">📷 Eigener Lead</span>` : "",
     sfcBadge(l),
     groupBadge(l),
     impressumBadge(l),
