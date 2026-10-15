@@ -205,3 +205,8 @@ body.aside-hidden .aside-handle { left: 0; width: 24px; }
 body.aside-hidden .layout { grid-template-columns: 1fr; padding-left: 30px; }
 body.aside-hidden aside { display: none; }
 @media (max-width: 860px) { .aside-handle { display: none; } }
+#drive-connect { width: 100%; font-weight: 600; }
+.drive-setup { display: grid; gap: 6px; margin-top: 8px; }
+.drive-setup label { font-size: 12px; font-weight: 600; display: grid; gap: 2px; }
+.drive-setup input { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 13px; }
+.drive-setup .pitch-btn { display: inline-block; margin: 0; }
