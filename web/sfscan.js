@@ -55,6 +55,7 @@ function sfsMatch(l) {
 function sfsState(m) {
   const a = m.acc;
   if (a.sperre || (a.sperre_status && !/^[-–—\s]*$/.test(a.sperre_status))) return { c: "r", txt: "gesperrt, nicht kontaktieren" };
+  if (a.offen && a.offen.length) return { c: "y", txt: "offene Aufgabe/Termin geplant (" + a.offen.join(", ") + ")", offen: true };
   if (!a.letzter_kontakt) return { c: "n", txt: a.gelesen ? "Kontaktdatum nicht lesbar" : "Kontaktdatum noch nicht gelesen" };
   const days = Math.floor((Date.now() - new Date(a.letzter_kontakt).getTime()) / 864e5);
   return days > 90 ? { c: "g", txt: "frei: letzter Kontakt über 3 Monate her", days } : { c: "y", txt: "kürzlich kontaktiert (unter 3 Monate)", days };
@@ -73,9 +74,10 @@ function sfsDetailHtml(l, colspan) {
   const m = sfsMatch(l);
   if (!m) return "";
   const a = m.acc, s = sfsState(m);
+  const offen = a.offen && a.offen.length ? `<tr><td>Offene Aufgaben</td><td><b class="sfs-bad">${esc(a.offen.join(", "))}</b> (geplanter Anruf/Termin in Salesforce)</td></tr>` : "";
   const kontakt = a.letzter_kontakt ? `<b>${fmtDate(a.letzter_kontakt)}</b> (${sfsMonths(s.days)})${a.quelle ? " · Quelle: " + esc(a.quelle) : ""}` : esc(s.txt);
   const sperre = s.c === "r" ? `<b class="sfs-bad">ja${a.sperre_status ? ": " + esc(a.sperre_status) : ""}</b>` : "nein";
-  const frei = s.c === "g" ? `<b class="sfs-good">ja, älter als 3 Monate</b>` : s.c === "y" ? "nein, kürzlich kontaktiert" : s.c === "r" ? "nein, gesperrt" : "unklar";
+  const frei = s.c === "g" ? `<b class="sfs-good">ja, älter als 3 Monate</b>` : s.c === "y" ? (s.offen ? "nein, offene Aufgabe/Termin " + esc(a.offen.join(", ")) : "nein, kürzlich kontaktiert") : s.c === "r" ? "nein, gesperrt" : "unklar";
   return `<tr class="near-detail"><td colspan="${colspan}"><div class="near-box">
     <div class="near-head"><b>Salesforce: ${esc(a.name)}</b>
       ${a.url ? `<a class="pitch-btn" href="${esc(a.url)}" target="_blank" rel="noopener">In Salesforce öffnen ↗</a>` : ""}</div>
@@ -83,6 +85,7 @@ function sfsDetailHtml(l, colspan) {
       <tr><td>Treffer</td><td>Adresse stimmt (${esc(a.strasse)}, ${esc(a.plz)} ${esc(a.ort)}) · Name passt in: ${esc(m.shared.join(", "))}</td></tr>
       <tr><td>Firmenstatus</td><td>${esc(a.status || "–")}</td></tr>
       <tr><td>Letzter Kontakt</td><td>${kontakt}</td></tr>
+      ${offen}
       <tr><td>Gesperrt</td><td>${sperre}</td></tr>
       <tr><td>Frei?</td><td>${frei}</td></tr>
     </table></div></td></tr>`;
