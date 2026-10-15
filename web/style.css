@@ -196,9 +196,12 @@ aside label.btn.sf-csv:hover { border-color: var(--accent); }
 .folder-actions { display: flex; gap: 6px; margin-top: 6px; }
 .folder-actions button { font-size: 12px; padding: 5px 8px; }
 
-/* Filterleiste ein-/ausklappen */
-.aside-toggle { font-size: 12px; padding: 5px 10px; }
-aside .aside-toggle { width: 100%; margin-bottom: 12px; color: var(--muted); }
-body.aside-hidden .layout { grid-template-columns: 1fr; }
+/* Filterleiste ein-/ausklappen: Griff am Rand, bleibt beim Scrollen stehen */
+.aside-handle { position: fixed; top: 50%; left: 321px; transform: translateY(-50%); z-index: 900; width: 18px; height: 84px;
+  padding: 0; border: 1px solid var(--line); border-radius: 0 8px 8px 0; background: var(--panel); color: var(--accent);
+  box-shadow: 1px 1px 4px rgba(0,0,0,.12); font-size: 13px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.aside-handle:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+body.aside-hidden .aside-handle { left: 0; width: 24px; }
+body.aside-hidden .layout { grid-template-columns: 1fr; padding-left: 30px; }
 body.aside-hidden aside { display: none; }
-#aside-show { font-weight: 600; color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+@media (max-width: 860px) { .aside-handle { display: none; } }

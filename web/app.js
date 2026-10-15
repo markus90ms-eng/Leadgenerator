@@ -326,15 +326,16 @@ async function init() {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
+  // Griff am Rand der Filterleiste: bleibt beim Scrollen stehen
   const setAside = (hidden) => {
     document.body.classList.toggle("aside-hidden", hidden);
-    $("#aside-show").hidden = !hidden;
+    $("#aside-handle span").textContent = hidden ? "▶" : "◀";
+    $("#aside-handle").title = hidden ? "Filter anzeigen" : "Filter einklappen";
     store("asideHidden", hidden);
     fitNearBoxes();
     state.map?.invalidateSize();
   };
-  $("#aside-hide").onclick = () => setAside(true);
-  $("#aside-show").onclick = () => setAside(false);
+  $("#aside-handle").onclick = () => setAside(!document.body.classList.contains("aside-hidden"));
   setAside(load("asideHidden", false));
   $("#sort-by").onchange = () => {
     const k = $("#sort-by").value;
