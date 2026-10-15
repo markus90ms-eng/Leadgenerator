@@ -61,11 +61,16 @@ function sfsState(m) {
   return days > 90 ? { c: "g", txt: "frei: letzter Kontakt über 3 Monate her", days } : { c: "y", txt: "kürzlich kontaktiert (unter 3 Monate)", days };
 }
 
+const sfsAttr = (a) => (a.opps > 0 || a.vg > 0);
+const sfsAttrTxt = (a) => [a.opps > 0 ? a.opps + " Opportunit" + (a.opps === 1 ? "y" : "ies") : "", a.vg > 0 ? a.vg + " Vertriebsgesellschaft" + (a.vg === 1 ? "" : "en") : ""].filter(Boolean).join(", ");
+
 function sfsDot(l) {
   const m = sfsMatch(l);
   if (!m) return "";
   const s = sfsState(m);
-  return `<div><button class="sfs-dot ${s.c}" data-sfs="${esc(l.id)}" title="Salesforce: ${esc(s.txt)} – klicken für Details" aria-expanded="${state.openSf.has(l.id)}">S</button></div>`;
+  const star = s.c === "g" && sfsAttr(m.acc);
+  const tip = s.txt + (star ? " – besonders attraktiv: " + sfsAttrTxt(m.acc) : "");
+  return `<div><button class="sfs-dot ${s.c}${star ? " star" : ""}" data-sfs="${esc(l.id)}" title="Salesforce: ${esc(tip)} – klicken für Details" aria-expanded="${state.openSf.has(l.id)}">S${star ? "<i>★</i>" : ""}</button></div>`;
 }
 
 function sfsMonths(d) { return d < 60 ? `vor ${d} Tagen` : `vor ${Math.round(d / 30)} Monaten`; }
@@ -89,6 +94,7 @@ function sfsDetailHtml(l, colspan) {
       ${offen}
       <tr><td>Gesperrt</td><td>${sperre}</td></tr>
       <tr><td>Frei?</td><td>${frei}</td></tr>
+      ${sfsAttr(a) ? `<tr><td>Potenzial</td><td><b class="${s.c === "g" ? "sfs-good" : ""}">${s.c === "g" ? "★ besonders attraktiv: " : ""}${esc(sfsAttrTxt(a))}</b> im Account${a.kontakte ? " · " + a.kontakte + " Kontakte" : ""}</td></tr>` : ""}
     </table></div></td></tr>`;
 }
 
@@ -99,7 +105,9 @@ function sfsMatches(l) {
   if (f === "nein") return !m;
   if (!m) return false;
   if (f === "ja") return true;
-  return sfsState(m).c === { frei: "g", kuerzlich: "y", gesperrt: "r" }[f];
+  const st = sfsState(m);
+  if (f === "attraktiv") return st.c === "g" && sfsAttr(m.acc);
+  return st.c === { frei: "g", kuerzlich: "y", gesperrt: "r" }[f];
 }
 
 document.addEventListener("click", (e) => {

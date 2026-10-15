@@ -255,3 +255,4 @@ td.status-note textarea:focus { height: 70px; }
 .sfs-dot.g { background: #1f7a3d; } .sfs-dot.y { background: #e0a100; } .sfs-dot.r { background: #b3261e; } .sfs-dot.n { background: #8a93a3; }
 .sfs-table { border-collapse: collapse; font-size: 13px; margin-top: 6px; } .sfs-table td { padding: 2px 14px 2px 0; vertical-align: top; } .sfs-table td:first-child { color: var(--muted); }
 .sfs-good { color: var(--good); } .sfs-bad { color: var(--bad, #b3261e); }
+.sfs-dot { position: relative; } .sfs-dot i { position: absolute; top: -7px; right: -8px; font-style: normal; font-size: 12px; color: #e0a100; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
