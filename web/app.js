@@ -100,7 +100,7 @@ function enrich(l, since) {
   const size = sizeClass(l);
   const am = ampel(l, reason, size);
   return { ...l, kreis, new_reason: reason, score: s, score_reasons: reasons, near, near_count: near?.count || 0,
-    size: size.cls, size_rank: size.rank, size_why: size.why, ampel: am.color, ampel_pts: am.pts, ampel_why: am.why,
+    size: size.cls, size_rank: size.rank, size_why: size.why, st_n: l.st || 1, city: l.city || "", ampel: am.color, ampel_pts: am.pts, ampel_why: am.why,
     status: p?.status || "neu", notes: p?.notes || "" };
 }
 
@@ -230,6 +230,8 @@ function pitchPrompt(l) {
     l.photo ? `Gesehen: eigene Beobachtung (Werbung auf Fahrzeug/Schild)${l.ocr ? ` – Text auf dem Foto: „${l.ocr.replace(/\s+/g, " ").slice(0, 300)}“` : ""}` : "",
     signalText(l) ? `Signale: ${signalText(l)}` : "",
     pipeEntry(l)?.contact?.name ? `Ansprechpartner: ${pipeEntry(l).contact.anrede || ""} ${pipeEntry(l).contact.name}`.replace("  ", " ") : "",
+    l.ws?.imp ? `Laut Impressum: ${impressumText(l.ws.imp)}` : "",
+    l.gz ? `Zentrale der Gruppe laut Impressum: ${l.gz}` : "",
     l.grp ? `Gruppe: gehört zu „${l.gn || l.grp}“ mit ${l.st} Standorten in ${l.go} Orten (gleiche Website) – Werbung wird vermutlich zentral entschieden, der Pitch sollte die Gruppe ansprechen` : "",
     l.new_reason ? `Besonderheit: ${l.new_reason}${l.start_date ? " (" + fmtDate(l.start_date) + ")" : ""}` : "",
   ].filter(Boolean).join("\n");
@@ -320,10 +322,15 @@ async function init() {
   $("#backup-save").onclick = saveBackup;
   $("#backup-load").onchange = loadBackup;
   $("#min-score").oninput = () => { $("#min-score-val").textContent = $("#min-score").value; render(); };
-  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse"]) {
+  for (const id of ["#hide-chains", "#need-contact", "#text", "#status-filter", "#months", "#topics", "#size-filter", "#only-green", "#hiring", "#group-collapse", "#web-filter", "#grp-filter", "#sitz-filter"]) {
     $(id).addEventListener("input", () => { state.limit = 200; render(); });
   }
   $("#cats").addEventListener("change", catsChanged);
+  $("#sort-by").onchange = () => {
+    const k = $("#sort-by").value;
+    state.sort = { key: k, dir: ["name", "city", "category"].includes(k) ? 1 : -1 };
+    render();
+  };
   $("#cats").addEventListener("click", (e) => {
     const t = e.target.closest("[data-toggle]");
     if (!t) return;
@@ -516,6 +523,9 @@ function filtered(rows) {
     (!$("#size-filter").value || l.size_rank >= ($("#size-filter").value === "L" ? 3 : 2)) &&
     (!$("#only-green").checked || l.ampel === "g") &&
     (!$("#hiring").checked || l.ws?.jobs || l.ws?.kar) &&
+    (!$("#web-filter").value || ($("#web-filter").value === "mit") === !!l.website) &&
+    (!$("#grp-filter").value || ($("#grp-filter").value === "gruppe") === !!l.grp) &&
+    sitzMatches(l, $("#sitz-filter").value) &&
     sfcMatches(l) &&
     l.score >= minScore &&
     (!text || `${l.name} ${l.address} ${l.city} ${l.kind}`.toLowerCase().includes(text)));
@@ -606,6 +616,7 @@ function rowHtml(l) {
     l.u ? `<span class="badge chain" title="Eintrag aus Overture mit geringer Sicherheit – vor dem Anruf kurz prüfen">unsicher</span>` : "",
     sfcBadge(l),
     groupBadge(l),
+    impressumBadge(l),
   ].join("");
   const site = l.website && /^https?:\/\//i.test(l.website) ? l.website : l.website ? "https://" + l.website : "";
   const contact = [
@@ -770,7 +781,9 @@ function exportCsv() {
     ["Nächste Ströer-Fläche", (l) => l.near?.nearest ? `${mediaName(l.near.nearest.typ)}: ${l.near.nearest.standort} (SDAW ${l.near.nearest.id})` : ""],
     ["Träger", "pt"], ["Unsicher", (l) => (l.u ? "ja" : "")],
     ["Größe (geschätzt)", "size"], ["Ampel", (l) => AMPEL_LABEL[l.ampel]], ["Signale", (l) => signalText(l)],
-    ["Rechtsform", (l) => l.ws?.rf || l.rf || ""], ["Offene Stellen", (l) => l.ws?.jobs || ""],
+    ["Rechtsform", (l) => l.ws?.rf || l.rf || ""],
+    ["Impressum", (l) => (l.ws?.imp ? impressumText(l.ws.imp) : "")], ["Gruppe", (l) => l.gn || ""],
+    ["Standorte der Gruppe", (l) => l.st || ""], ["Zentrale (Ort)", (l) => l.gz || ""], ["Offene Stellen", (l) => l.ws?.jobs || ""],
     ["Quelle", (l) => l.source_link || (l.photo ? "Eigenes Foto " + fmtDate(l.created) : "") ||
       (l.id.startsWith("osm:") ? "https://www.openstreetmap.org/" + l.id.slice(4) : l.id.startsWith("ov:") ? "Overture Maps" : "")],
   ];

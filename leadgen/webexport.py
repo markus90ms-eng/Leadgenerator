@@ -42,7 +42,7 @@ def compact(lead):
         out["u"] = 1  # unsicherer Eintrag (Overture, geringe Konfidenz)
     if lead.get("operator_type") or lead.get("pt"):
         out["pt"] = lead.get("operator_type") or lead.get("pt")
-    for key in ("rf", "st", "ws", "grp", "go", "gn"):  # Rechtsform, Standorte, Website-Signale, Gruppe
+    for key in ("rf", "st", "ws", "grp", "go", "gn", "gz", "gzk"):  # Rechtsform, Standorte, Website-Signale, Gruppe
         if lead.get(key):
             out[key] = lead[key]
     if lead.get("lat") is not None:
@@ -188,8 +188,7 @@ def _group_name(key, names):
     fitting = sorted((n for n in names if name_fits_domain(n, key)), key=len)
     with_form = [n for n in fitting if webcheck.legal_form(n)]
     if with_form:  # nur bis zur Rechtsform (danach steht oft ein Personenname)
-        m = re.match(r"^(.*?(?:GmbH\s*&\s*Co\.?\s*KG|gGmbH|GmbH|AG|KG|e\.\s?V\.|eG|UG|SE|OHG|e\.\s?K\.))", with_form[0])
-        return m.group(1) if m else with_form[0]
+        return webcheck.cut_after_form(with_form[0])
     return fitting[0] if fitting and len(fitting[0]) <= 40 else key.rsplit(".", 1)[0]
 
 
@@ -224,8 +223,16 @@ def build_groups(leads_by_kreis):
             "members": [[l["id"], l["name"], l.get("city", ""), ags, l.get("phone", ""), l.get("address", ""),
                          1 if (l.get("unsure") or l.get("u")) else 0] for ags, l in ms],
         }
+        # Zentrale laut Impressum (häufigste Angabe der Standorte mit geprüfter Website)
+        imps = Counter(json.dumps(l["ws"]["imp"], sort_keys=True, ensure_ascii=False)
+                       for _, l in ms if l.get("ws", {}).get("imp", {}).get("p"))
+        if imps:
+            groups[key]["imp"] = json.loads(imps.most_common(1)[0][0])
         for _, lead in ms:
             lead.update(grp=key, st=len(ms), go=len(orte), gn=name)
+            if groups[key].get("imp"):
+                lead["gz"] = groups[key]["imp"].get("o", "")
+                lead["gzk"] = groups[key]["imp"].get("k", "")
     return groups
 
 
@@ -242,8 +249,9 @@ def write_groups(out, groups):
         write(out, f"data/gruppen/{c}.json", part)
 
 
-def add_signals(leads_by_kreis, cache):
-    """Rechtsform aus dem Namen und Website-Signale ergänzen."""
+def add_signals(leads_by_kreis, cache, plz_kreis=None):
+    """Rechtsform aus dem Namen und Website-Signale (inkl. Impressum) ergänzen."""
+    plz_kreis = plz_kreis or {}
     for leads in leads_by_kreis.values():
         for lead in leads:
             rf = webcheck.legal_form(lead.get("name"))
@@ -252,7 +260,9 @@ def add_signals(leads_by_kreis, cache):
             d = own_domain(lead)
             sig = cache.get(d) if d else None
             if sig and not sig.get("err") and not sig.get("rb"):
-                ws = {k: v for k, v in sig.items() if k != "d"}
+                ws = {k: v for k, v in sig.items() if k not in ("d", "v")}
+                if ws.get("imp", {}).get("p") in plz_kreis:  # Kreis des Firmensitzes laut Impressum
+                    ws["imp"] = {**ws["imp"], "k": plz_kreis[ws["imp"]["p"]][0]}
                 if ws:
                     lead["ws"] = ws
 
@@ -263,16 +273,19 @@ def webcheck_targets(leads_by_kreis, cache, today, recheck_days=webcheck.RECHECK
     stale = (date.fromisoformat(today) - timedelta(days=recheck_days)).isoformat()
     retry = (date.fromisoformat(today) - timedelta(days=30)).isoformat()
     best = {}
+    group_size = Counter(group_key(l) for leads in leads_by_kreis.values() for l in leads)
     for leads in leads_by_kreis.values():
         for lead in leads:
             d = own_domain(lead)
             if not d or lead.get("chain") or lead.get("unsure") or lead.get("u"):
                 continue
             prev = cache.get(d)
-            if prev and prev.get("d", "") > (retry if prev.get("err") else stale):
+            if prev and prev.get("v", 1) >= webcheck.VERSION and prev.get("d", "") > (retry if prev.get("err") else stale):
                 continue
             weight = CATEGORIES.get(lead.get("category"), {}).get("weight", 20)
-            key = (prev.get("d", "") if prev else "", -weight)
+            size = group_size[group_key(lead)] if group_key(lead) else 1
+            # Gruppen zuerst (dort sitzt die Zentrale), dann wichtige Branchen
+            key = (prev.get("d", "") if prev and prev.get("v", 1) >= webcheck.VERSION else "", -min(size, 50), -weight)
             if d not in best or key < best[d][0]:
                 best[d] = (key, lead["website"])
     return [(d, url) for d, (key, url) in sorted(best.items(), key=lambda x: x[1][0])]
@@ -456,7 +469,7 @@ def main(argv=None):
         webcheck.run(targets, cache, today, max_count=args.webcheck_max, max_seconds=args.webcheck_minutes * 60,
                      log=lambda m: print(m, flush=True))
     write_webcheck_cache(args.out, cache)
-    add_signals(merged, cache)
+    add_signals(merged, cache, plz_table(list(merged.items())))
     groups = build_groups(merged)
     write_groups(args.out, groups)
     print(f"Gruppen: {len(groups)} Gruppen mit gleicher Website, {sum(g['n'] for g in groups.values())} Betriebe", flush=True)

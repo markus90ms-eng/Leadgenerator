@@ -185,3 +185,9 @@ aside label.btn.sf-csv:hover { border-color: var(--accent); }
 .grp-btn.open::after { content: " ▾"; }
 .grp-btn:hover, .grp-btn:focus-visible { background: #d4ddf8; }
 .grp-list li { grid-template-columns: 130px 1fr auto; }
+.badge.imp { background: #fff1e6; color: #a8470b; }
+.badge.imp.ok { background: var(--good-soft); color: var(--good); }
+.grp-imp { background: #fff7ef; border: 1px solid #f6d8bd; border-radius: 6px; padding: 6px 10px; margin: 4px 0; }
+.filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; margin: 6px 0; }
+.filter-grid label { font-weight: 600; font-size: 12px; margin: 0; display: grid; gap: 2px; }
+.filter-grid select { font-size: 13px; padding: 5px 6px; }

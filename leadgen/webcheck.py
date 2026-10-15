@@ -28,6 +28,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; Leadgenerator-BW/1.0; +https://markus90ms
 ROBOT_NAME = "Leadgenerator-BW"
 MAX_BYTES = 800_000
 RECHECK_DAYS = 90
+VERSION = 2  # 2: mit Impressum-Daten (imp); ältere Ergebnisse werden neu geprüft
 
 # Kurze Kürzel nur in korrekter Schreibweise (sonst Treffer in normalem Text)
 LEGAL_FORMS = [
@@ -129,12 +130,63 @@ def find_link(base, page, words):
     return None
 
 
+_PLZ_ORT = re.compile(r"\b(?:D-?\s?)?(\d{5})\s+([A-ZÄÖÜ][\wäöüßÄÖÜ.\-]*(?:\s+(?:am|an|im|ob|unter|bei|in|a\.|i\.)\s*[A-ZÄÖÜ][\wäöüß.\-]*|\s+[A-ZÄÖÜ][a-zäöüß]+)?)")
+_STREET = re.compile(r"([A-ZÄÖÜ][\wäöüßÄÖÜ.\- ]{2,40}?(?:stra(?:ß|ss)e|str\.|weg|platz|gasse|allee|ring|damm|ufer|steige|steig|markt|hof|tor|graben|berg|halde|park|feld|wiesen?|garten)\s*\d+\s*[a-zA-Z]?(?:\s*[-/]\s*\d+[a-zA-Z]?)?)", re.I)
+_REGISTER = re.compile(r"\b(HR\s?[AB])\s*:?\s*(\d{2,7}\s?[A-Z]?)\b")
+_COURT_NAME = re.compile(r"(?:Amtsgericht|Registergericht[:\s]*(?:Amtsgericht)?|AG)\s+([A-ZÄÖÜ][a-zäöüß]+(?:\s+(?:am|an|im|i\.)\s*[A-ZÄÖÜ]?[\w.]+)?)")
+_SKIP_LINE = re.compile(r"impressum|angaben gem|§\s*5|tmg|ddg|kontakt|anschrift|verantwortlich|vertreten", re.I)
+
+
+_FORM_END = re.compile(r"^(.*?(?:GmbH\s*(?:&|\+|und)\s*Co\.?\s*KG|gGmbH|GmbH|AG|KGaA|KG|e\.\s?V\.|eG|UG(?:\s*\(haftungsbeschränkt\))?|SE|OHG|GbR|e\.\s?K(?:fm|fr)?\.))", re.I)
+
+
+def cut_after_form(name):
+    """'Bickel GmbH, Werderstr. 85/1' -> 'Bickel GmbH' (danach folgen oft Adresse oder Personen)."""
+    m = _FORM_END.match(name or "")
+    return m.group(1).strip() if m else (name or "").strip()
+
+
+def impressum_lines(page):
+    parts = re.split(r"<br\s*/?>|</(?:p|div|li|h\d|td|tr|span|address)>|\n", page, flags=re.I)
+    return [t for t in (text_of(p).strip(" ,;|") for p in parts) if t]
+
+
+def impressum_data(page):
+    """Firmierung, Anschrift, Telefon und Registereintrag aus dem Impressum (nur Firmendaten)."""
+    lines = impressum_lines(page)[:200]
+    out = {}
+    for i, line in enumerate(lines):
+        if "f" not in out and len(line) <= 90 and legal_form(line) and not _SKIP_LINE.search(line) \
+                and not _REGISTER.search(line) and "@" not in line:
+            out["f"] = cut_after_form(re.sub(r"\s+", " ", line))
+        if "p" not in out:
+            m = _PLZ_ORT.search(line)
+            if m and not re.search(r"postfach", line, re.I):
+                out["p"], out["o"] = m.group(1), m.group(2).strip(" .,")
+                st = _STREET.search(line[:m.start()]) or (i > 0 and _STREET.search(lines[i - 1]))
+                if st:
+                    out["s"] = re.sub(r"\s+", " ", st.group(1)).strip()
+        if "t" not in out and re.search(r"\b(tel|telefon|fon|phone)\b", line, re.I):
+            m = re.search(r"(\+?\d[\d\s/()\-–.]{5,}\d)", line)
+            if m:
+                out["t"] = re.sub(r"\s+", " ", m.group(1)).strip()
+    text = " ".join(lines)
+    reg = _REGISTER.search(text)
+    if reg:
+        court = _COURT_NAME.search(text)
+        out["r"] = f"{reg.group(1).replace(' ', '')} {reg.group(2).strip()}" + (f", Amtsgericht {court.group(1)}" if court else "")
+    return out if ("p" in out or "f" in out) else {}
+
+
 def analyze(home, impressum="", career=""):
     """Signale aus den Seiten (HTML-Text) ableiten."""
     out = {}
     imp_text = text_of(impressum) if impressum else ""
     home_text = text_of(home)
-    rf = legal_form(imp_text) if imp_text else ""
+    imp = impressum_data(impressum) if impressum else {}
+    if imp:
+        out["imp"] = imp
+    rf = legal_form(imp.get("f") or imp_text) if imp_text else ""
     if rf:
         out["rf"] = rf
     if re.search(r"\bHR\s?[AB]\b\s*\d|handelsregister", imp_text, re.I):
@@ -183,6 +235,7 @@ def check(url, today, fetcher=None):
     car = fetcher(car_url) if car_url and car_url != imp_url else None
     out = analyze(page, imp[1] if imp else "", car[1] if car else "")
     out["d"] = today
+    out["v"] = VERSION
     return out
 
 

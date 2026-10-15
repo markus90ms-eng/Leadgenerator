@@ -229,7 +229,8 @@ function groupBadge(l) {
   return `<button class="grp-btn${state.openGroup === l.id ? " open" : ""}" data-grp="${esc(l.id)}" title="Alle Standorte der Gruppe zeigen">`
     + `Gruppe ${esc(l.gn || l.grp)} · ${l.st} Standorte${l.go > 1 ? ` in ${l.go} Orten` : ""}</button>`
     + (l.grp_here > 1 ? `<span class="badge chain">${l.grp_here} davon in dieser Liste</span>` : "")
-    + (l.st >= 20 ? `<span class="badge chain" title="Viele Standorte – Werbung wird vermutlich zentral entschieden">zentral gesteuert</span>` : "")
+    + (l.st >= 20 || l.gz ? `<span class="badge ${l.gz ? "imp" : "chain"}" title="${l.gz ? "Zentrale laut Impressum der Website – dort fällt vermutlich die Entscheidung" : "Viele Standorte – Werbung wird vermutlich zentral entschieden"}">`
+      + `${l.st >= 20 ? "zentral gesteuert" : "Zentrale"}${l.gz ? `: ${esc(l.gz)}${l.gzk && l.gzk !== l.kreis ? ` (${esc(kreisName(l.gzk))})` : ""}` : ""}</span>` : "")
     + (p && state.tab !== "pipeline" && p.status !== "neu"
       ? `<span class="badge fresh" title="Status gilt für alle Standorte der Gruppe">Gruppe: ${esc(STATUS_LABELS[p.status] || p.status)} ${fmtDate((p.updated || "").slice(0, 10))}</span>` : "");
 }
@@ -258,6 +259,7 @@ function groupDetailHtml(l, colspan) {
       <b>Gruppe ${esc(g.name)}: ${g.n} Standorte in ${g.orte} Orten</b>
       ${g.zentrale ? `<span>Vermutlich Zentrale: <a href="tel:${esc(g.zentrale)}">★ ${esc(fmtPhone(g.zentrale))}</a></span>` : ""}
     </div>
+    ${g.imp ? `<div class="grp-imp"><b>Zentrale laut Impressum:</b> ${esc(impressumText(g.imp))}${g.imp.k ? ` · ${esc(kreisName(g.imp.k))}` : ""}</div>` : `<div class="sub">Zentrale laut Impressum: noch nicht geprüft (wird nachts erfasst)</div>`}
     <div class="sub">Kreise: ${esc(kreise)} · Status, Notiz und Ansprechpartner gelten für die ganze Gruppe.</div>
     <ul class="near-list grp-list">${items}</ul>
   </div></td></tr>`;
@@ -275,4 +277,31 @@ function collapseGroups(rows) {
     out.push(first);
   }
   return out;
+}
+
+// ---------- Impressum ------------------------------------------------------
+const impressumText = (imp) => [imp.f, imp.s, [imp.p, imp.o].filter(Boolean).join(" "), imp.t ? `Tel. ${imp.t}` : "", imp.r]
+  .filter(Boolean).join(", ");
+
+function impressumBadge(l) {
+  const imp = l.ws?.imp;
+  if (!imp) return "";
+  const tip = esc(`Laut Impressum der Website:\n${impressumText(imp).replace(/, /g, "\n")}`);
+  const plz = (l.address || "").match(/\b\d{5}\b/)?.[0];
+  if (imp.p && plz && imp.p !== plz) {
+    return `<span class="badge imp" title="${tip}">Sitz laut Impressum: ${esc(imp.o || imp.p)}</span>`;
+  }
+  return `<span class="badge imp ok" title="${tip}">✓ Impressum</span>`;
+}
+
+// Kreis des Firmensitzes bzw. der Gruppen-Zentrale (laut Impressum)
+const sitzKreis = (l) => l.ws?.imp?.k || l.gzk || "";
+function sitzMatches(l, mode) {
+  if (!mode) return true;
+  const known = l.ws?.imp || l.gz;
+  if (mode === "bekannt") return !!known;
+  const k = sitzKreis(l);
+  if (!k) return false;
+  const here = state.tab === "pipeline" || state.tab === "eigene" ? l.kreis : $("#kreis").value;
+  return mode === "hier" ? k === here : k !== here;
 }

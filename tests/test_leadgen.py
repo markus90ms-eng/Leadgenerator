@@ -83,7 +83,7 @@ def fake_overture_read(log=print, **kw):
 WEB_PAGES = {
     "https://bickelgmbh.de/": '<a href="/impressum">Impressum</a> <a href="/karriere">Karriere</a> '
                               '<a href="https://www.instagram.com/bickel/">Insta</a> In den Warenkorb',
-    "https://bickelgmbh.de/impressum": "<p>Bickel GmbH</p><p>Registergericht: AG Stuttgart HRB 102030</p>"
+    "https://bickelgmbh.de/impressum": "<p>Bickel GmbH<br>Werderstr. 85/1<br>74074 Heilbronn</p><p>Registergericht: AG Stuttgart HRB 102030</p>"
                                        "<p>Stammkapital: 50.000 €</p>",
     "https://bickelgmbh.de/karriere": "<ul><li>Anlagenmechaniker SHK (m/w/d)</li><li>Kundendienst (w/m/d)</li></ul>",
     "https://autohaus-mueller.de/": "<p>Willkommen</p>",
@@ -302,7 +302,11 @@ class WebExportTest(unittest.TestCase):
             self.assertFalse({"Alter Laden", "Geldautomat", "Draußen GmbH"} & set(leads))
             # Rechtsform aus dem Namen, Signale aus dem Website-Check
             self.assertEqual(bickel["rf"], "GmbH")
+            imp = bickel["ws"].pop("imp")
             self.assertEqual(bickel["ws"], {"rf": "GmbH", "hr": 1, "kap": 50000, "kar": 1, "jobs": 2, "shop": 1, "soc": 1})
+            self.assertEqual(imp, {"f": "Bickel GmbH", "s": "Werderstr. 85/1", "p": "74074", "o": "Heilbronn",
+                                   "r": "HRB 102030, Amtsgericht Stuttgart"})
+            self.assertEqual(bickel["gz"], "Heilbronn")  # Zentrale der Gruppe laut Impressum
             self.assertNotIn("ws", leads["Autohaus Müller"])  # robots.txt sperrt
             # Gruppe: Bickel hat zwei Standorte mit gleicher Website
             self.assertEqual((bickel["grp"], bickel["st"]), ("bickelgmbh.de", 2))

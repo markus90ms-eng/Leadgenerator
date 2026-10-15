@@ -125,6 +125,29 @@
       <label class="check" title="Grün: sucht Personal, Shop, Social Media, mehrere Standorte, gut erreichbar …"><input type="checkbox" id="only-green"> nur grüne Ampel</label>
       <label class="check"><input type="checkbox" id="hiring"> sucht Personal (laut Website)</label>
       <label class="check only-search only-new only-eigene" title="Betriebe mit gleicher Website (z. B. alle Kinderhäuser eines Trägers) nur einmal zeigen"><input type="checkbox" id="group-collapse"> Gruppen zusammenfassen</label>
+      <div class="filter-grid">
+        <label>Website
+          <select id="web-filter"><option value="">alle</option><option value="mit">mit Website</option><option value="ohne">ohne Website</option></select>
+        </label>
+        <label>Gruppen
+          <select id="grp-filter"><option value="">alle</option><option value="gruppe">nur Gruppen</option><option value="einzel">nur Einzelbetriebe</option></select>
+        </label>
+        <label title="Laut Impressum der Firmen-Website (wird nach und nach erfasst)">Firmensitz / Zentrale
+          <select id="sitz-filter"><option value="">egal</option><option value="hier">im gewählten Kreis</option><option value="woanders">außerhalb</option><option value="bekannt">Impressum bekannt</option></select>
+        </label>
+        <label>Sortieren nach
+          <select id="sort-by">
+            <option value="score">Score</option>
+            <option value="ampel_pts">Ampel</option>
+            <option value="size_rank">Größe</option>
+            <option value="st_n">Anzahl Standorte</option>
+            <option value="near_count">Ströer-Flächen im Umkreis</option>
+            <option value="name">Name</option>
+            <option value="city">Ort</option>
+            <option value="category">Branche</option>
+          </select>
+        </label>
+      </div>
       <label for="min-score">Mindest-Score: <b id="min-score-val">0</b></label>
       <input type="range" id="min-score" min="0" max="100" step="5" value="0">
       <input type="search" id="text" placeholder="Name, Ort, Straße …">
