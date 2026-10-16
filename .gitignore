@@ -4,7 +4,3 @@ leads.db
 exports/
 site/
 *.osm.pbf
-
-# Parkplatz-Autobuchung (enthaelt Token / Debug-Dumps)
-parkplatz/.env
-parkplatz/debug/
