@@ -56,6 +56,7 @@ function sfsState(m) {
   const a = m.acc;
   if (a.sperre || (a.sperre_status && !/^[-–—\s]*$/.test(a.sperre_status))) return { c: "r", txt: "gesperrt, nicht kontaktieren" };
   if (a.offen && a.offen.length && a.offen_blockt !== false) return { c: "y", txt: "offene Aufgabe/Termin geplant (" + a.offen.join(", ") + ")", offen: true };
+  if (!a.letzter_kontakt && a.keine_aktivitaet) return { c: "g", txt: "frei: noch nie kontaktiert (keine Aktivität)", ohne: true };
   if (!a.letzter_kontakt) return { c: "n", txt: a.gelesen ? "Kontaktdatum nicht lesbar" : "Kontaktdatum noch nicht gelesen" };
   const days = Math.floor((Date.now() - new Date(a.letzter_kontakt).getTime()) / 864e5);
   return days > 90 ? { c: "g", txt: "frei: letzter Kontakt über 3 Monate her", days } : { c: "y", txt: "kürzlich kontaktiert (unter 3 Monate)", days };
@@ -81,9 +82,9 @@ function sfsDetailHtml(l, colspan) {
   const a = m.acc, s = sfsState(m);
   const offen = a.offen && a.offen.length
     ? `<tr><td>Offene Aufgaben</td><td><b class="${a.offen_blockt === false ? "" : "sfs-bad"}">${esc(a.offen.join(", "))}</b> (geplanter Anruf/Termin) · ${a.offen_blockt === false ? "ohne Kommentar, zählt nicht als belegt" : esc(a.offen_hinweis || "belegt")}${a.offen_kommentar ? `<div class="sub">Kommentar: „${esc(a.offen_kommentar)}“</div>` : ""}</td></tr>` : "";
-  const kontakt = a.letzter_kontakt ? `<b>${fmtDate(a.letzter_kontakt)}</b> (${sfsMonths(s.days)})${a.quelle ? " · Quelle: " + esc(a.quelle) : ""}${a.quellen ? `<div class="sub">Aktivität-Feld: ${esc(fmtDate(a.quellen.feld) || "–")} · Verlauf: ${esc(fmtDate(a.quellen.verlauf) || "–")} · Zuletzt geändert: ${esc(fmtDate(a.quellen.geaendert) || "–")}</div>` : ""}` : esc(s.txt);
+  const kontakt = s.ohne ? "<b>ohne</b> (keine Aktivität in Salesforce)" : a.letzter_kontakt ? `<b>${fmtDate(a.letzter_kontakt)}</b> (${sfsMonths(s.days)})${a.quelle ? " · Quelle: " + esc(a.quelle) : ""}${a.quellen ? `<div class="sub">Aktivität-Feld: ${esc(fmtDate(a.quellen.feld) || "–")} · Verlauf: ${esc(fmtDate(a.quellen.verlauf) || "–")} · Zuletzt geändert: ${esc(fmtDate(a.quellen.geaendert) || "–")}</div>` : ""}` : esc(s.txt);
   const sperre = s.c === "r" ? `<b class="sfs-bad">ja${a.sperre_status ? ": " + esc(a.sperre_status) : ""}</b>` : "nein";
-  const frei = s.c === "g" ? `<b class="sfs-good">ja, älter als 3 Monate</b>` : s.c === "y" ? (s.offen ? "nein, offene Aufgabe/Termin " + esc(a.offen.join(", ")) : "nein, kürzlich kontaktiert") : s.c === "r" ? "nein, gesperrt" : "unklar";
+  const frei = s.c === "g" ? `<b class="sfs-good">${s.ohne ? "ja, noch nie kontaktiert" : "ja, älter als 3 Monate"}</b>` : s.c === "y" ? (s.offen ? "nein, offene Aufgabe/Termin " + esc(a.offen.join(", ")) : "nein, kürzlich kontaktiert") : s.c === "r" ? "nein, gesperrt" : "unklar";
   return `<tr class="near-detail"><td colspan="${colspan}"><div class="near-box">
     <div class="near-head"><b>Salesforce: ${esc(a.name)}</b>
       ${a.url ? `<a class="pitch-btn" href="${esc(a.url)}" target="_blank" rel="noopener">In Salesforce öffnen ↗</a>` : ""}</div>
