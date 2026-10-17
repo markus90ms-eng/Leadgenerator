@@ -17,6 +17,7 @@
     <button data-tab="new">Neugründungen</button>
     <button data-tab="news">News-Radar</button>
     <button data-tab="pipeline">Meine Pipeline</button>
+    <button data-tab="sfonly" title="Accounts aus dem Salesforce-Bestandsscan, zu denen es keinen Betrieb in der Firmensuche gibt">Nur in Salesforce</button>
   </nav>
 </header>
 
@@ -24,6 +25,11 @@
 <div class="layout">
   <aside>
     <div class="fold-all"><a href="#" id="fold-open">alle auf</a> · <a href="#" id="fold-close">alle zu</a></div>
+
+    <section class="only-sfonly">
+      <p class="small">Accounts aus deinem Salesforce-Bestandsscan, die zu keinem Betrieb der Firmensuche passen (Adresse und Name). Die Daten kommen nur von deinem Rechner (<code>Salesforce_starten.bat</code> muss laufen).</p>
+      <button id="sfo-reload">Neu abgleichen</button>
+    </section>
 
     <section class="only-eigene" data-fold="fotos">
       <label>Fotos hinzufügen</label>

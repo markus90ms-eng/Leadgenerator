@@ -444,7 +444,7 @@ async function init() {
   }));
 
   const startTab = location.hash.slice(1);
-  switchTab(["eigene", "search", "new", "news", "pipeline"].includes(startTab) ? startTab : "search");
+  switchTab(["eigene", "search", "new", "news", "pipeline", "sfonly"].includes(startTab) ? startTab : "search");
   loadKreis();
 }
 
@@ -524,8 +524,9 @@ function switchTab(tab) {
   document.querySelectorAll("aside [class*='only-']").forEach((el) => {
     el.hidden = !el.classList.contains("only-" + tab);
   });
-  $("#export").hidden = tab === "news";
-  $("#toggle-map").hidden = tab === "news";
+  $("#export").hidden = tab === "news" || tab === "sfonly";
+  $("#toggle-map").hidden = tab === "news" || tab === "sfonly";
+  if (tab === "sfonly" && $("#map")) $("#map").hidden = true;
   $("#pipe-tabs").hidden = tab !== "pipeline";
   renderQueue();
   render();
@@ -635,6 +636,7 @@ function render() {
   if (!state.meta) return;
   updateFoldDots();
   if (state.tab === "news") return renderNews();
+  if (state.tab === "sfonly") return sfsOnlyRender();
   const all = currentRows();
   const rows = filtered(all);
   state.visible = rows;

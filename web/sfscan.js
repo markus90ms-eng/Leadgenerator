@@ -197,3 +197,132 @@ document.addEventListener("click", (e) => {
 });
 window.addEventListener("focus", () => sfsLoad());
 window.addEventListener("load", () => sfsLoad(true));
+
+
+// ---------- Reiter "Nur in Salesforce" -----------------------------------
+// Accounts aus dem Bestandsscan, zu denen es in der Firmensuche keinen Betrieb gibt. Abgleich gegen die Kreise,
+// in denen die PLZ der Accounts liegen (Kreise werden dafür geladen, übrige Betriebe nicht behalten).
+state.sfOnly = null;
+state.sfOnlyUi = { st: "", text: "", limit: 300 };
+
+async function sfsOnlyLoad(force) {
+  if (state.sfOnlyBusy) return;
+  state.sfOnlyBusy = true;
+  state.sfOnlyErr = "";
+  try {
+    if (force || !sfs.rows) {
+      message("Lade den Salesforce-Bestandsscan …", true);
+      sfsApply(await sfcCall("/scan"));
+    }
+    if (!force && state.sfOnly?.scanAt === sfs.loadedAt) { message(""); return; }
+    const meta = await getSearchMeta();
+    const valid = new Set(state.meta.kreise.map((k) => k.ags));
+    const plzs = new Set(sfs.rows.map((r) => String(r.plz || "").trim()).filter(Boolean));
+    const queue = [...new Set([...plzs].map((p) => meta.plz?.[p]?.[0]).filter((x) => valid.has(x)))];
+    const total = queue.length, matched = new Set();
+    let done = 0;
+    message(`Gleiche Salesforce mit der Firmensuche ab: ${total} Kreise …`, true);
+    const work = async () => {
+      while (queue.length) {
+        const ags = queue.shift();
+        const companies = state.kreisData[ags] || await getJson(`data/kreis/${ags}.json`).catch(() => ({ leads: [] }));
+        for (const l of companies.leads || []) {
+          if (!plzs.has((l.address || "").match(/\b(\d{5})\b/)?.[1])) continue;
+          const m = sfsMatch(l);
+          if (m) matched.add(m.acc);
+        }
+        done++;
+        message(`Gleiche Salesforce mit der Firmensuche ab: ${done} von ${total} Kreisen …`, true);
+      }
+    };
+    await Promise.all([work(), work(), work()]);
+    const rows = sfs.rows.filter((r) => !matched.has(r) && r.land_de !== false);
+    state.sfOnly = { rows, scanAt: sfs.loadedAt, total: sfs.rows.length, matched: matched.size, kreise: total };
+    message("");
+  } catch (e) {
+    state.sfOnlyErr = e.message;
+    message(`Abgleich nicht möglich: ${e.message}. Läuft „Salesforce_starten.bat“ mit dem Bestandsscan auf deinem Rechner?`);
+  } finally {
+    state.sfOnlyBusy = false;
+    if (state.tab === "sfonly") render();
+  }
+}
+
+function sfsOnlyList() {
+  const ui = state.sfOnlyUi;
+  const text = ui.text.trim().toLowerCase().split(/[,;]+/).map((t) => t.trim()).filter(Boolean);
+  const want = { frei: ["g"], stern: ["g"], kuerzlich: ["y"], gesperrt: ["r"], unklar: ["n"] }[ui.st];
+  const out = [];
+  for (const r of state.sfOnly.rows) {
+    const s = sfsState({ acc: r });
+    if (want && !want.includes(s.c)) continue;
+    if (ui.st === "stern" && !sfsAttr(r)) continue;
+    if (text.length && !text.some((t) => (/^\d+$/.test(t) ? String(r.plz || "").startsWith(t) : `${r.ort} ${r.name} ${r.strasse}`.toLowerCase().includes(t)))) continue;
+    out.push({ r, s, star: s.c === "g" && sfsAttr(r) });
+  }
+  out.sort((a, b) => (b.star - a.star) || (a.r.letzter_kontakt || "").localeCompare(b.r.letzter_kontakt || "") || String(a.r.plz).localeCompare(String(b.r.plz)));
+  return out;
+}
+
+function sfsOnlyTable() {
+  const list = sfsOnlyList(), ui = state.sfOnlyUi, so = state.sfOnly;
+  state.sfOnlyVisible = list;
+  $("#summary").innerHTML = `<b>${list.length}</b> Accounts nur in Salesforce · ${so.rows.length} von ${so.total} Accounts ohne passenden Betrieb in der Firmensuche (abgeglichen in ${so.kreise} Kreisen)`;
+  const rows = list.slice(0, ui.limit).map(({ r, s, star }) => `<tr>
+    <td><button class="sfs-dot ${s.c}${star ? " star" : ""}" title="${esc(s.txt)}" disabled style="opacity:1;cursor:default">S${star ? "<i>★</i>" : ""}</button></td>
+    <td class="name">${esc(r.name)}<div class="sub">${esc(r.status || "")}${r.sperre ? " · Kontaktsperre" : ""}</div></td>
+    <td>${esc(r.plz)} ${esc(r.ort)}<div class="sub">${esc(r.strasse)}</div></td>
+    <td>${s.ohne ? "<b>ohne</b>" : r.letzter_kontakt ? `<b>${esc(fmtDate(r.letzter_kontakt))}</b>` : `<span class="sub">${esc(s.txt)}</span>`}${s.offen ? `<div class="sub">offene Aufgabe ${esc(r.offen.join(", "))}</div>` : ""}</td>
+    <td>${sfsAttr(r) ? `<b>${esc(sfsAttrTxt(r))}</b>` : `<span class="sub">–</span>`}</td>
+    <td>${esc(r.owner || "")}</td>
+    <td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">In Salesforce öffnen ↗</a>` : ""}</td></tr>`).join("");
+  $("#sfo-table").innerHTML = list.length
+    ? `<div class="table-wrap"><table><thead><tr><th>S</th><th>Firma</th><th>PLZ / Ort</th><th>Letzter Kontakt</th><th>Potenzial</th><th>Inhaber</th><th></th></tr></thead><tbody>${rows}</tbody></table>${list.length > ui.limit ? `<div class="more"><button id="sfo-more">Weitere 300 anzeigen (${list.length - ui.limit} übrig)</button></div>` : ""}</div>`
+    : `<p class="small">Keine Accounts mit diesem Filter.</p>`;
+}
+
+function sfsOnlyRender() {
+  if (typeof updateMap === "function") updateMap([]);
+  if (!state.sfOnly) {
+    $("#summary").textContent = "";
+    $("#results").innerHTML = state.sfOnlyErr ? `<p class="small">Noch nicht möglich: ${esc(state.sfOnlyErr)}</p>` : "";
+    if (!state.sfOnlyBusy) sfsOnlyLoad();
+    return;
+  }
+  const ui = state.sfOnlyUi;
+  if (!$("#sfo-table")) {
+    $("#results").innerHTML = `<div class="sfo-bar">
+      <label for="sfo-st">Salesforce</label>
+      <select id="sfo-st">
+        <option value="">alle</option>
+        <option value="frei">frei: letzter Kontakt über 3 Monate oder ohne</option>
+        <option value="stern">★ frei und mit Opportunities/Vertriebsgesellschaft</option>
+        <option value="kuerzlich">kürzlich kontaktiert / offene Aufgabe</option>
+        <option value="gesperrt">gesperrt</option>
+        <option value="unklar">Kontaktdatum noch nicht gelesen</option>
+      </select>
+      <input type="search" id="sfo-text" placeholder="PLZ, Ort, Name, Straße …">
+      <button id="sfo-csv">CSV-Export</button>
+    </div><div id="sfo-table"></div>`;
+    $("#sfo-st").value = ui.st;
+    $("#sfo-text").value = ui.text;
+  }
+  sfsOnlyTable();
+}
+
+document.addEventListener("input", (e) => {
+  if (e.target.id === "sfo-text") { state.sfOnlyUi.text = e.target.value; state.sfOnlyUi.limit = 300; sfsOnlyTable(); }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "sfo-st") { state.sfOnlyUi.st = e.target.value; state.sfOnlyUi.limit = 300; sfsOnlyTable(); }
+});
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#sfo-more")) { state.sfOnlyUi.limit += 300; sfsOnlyTable(); }
+  if (e.target.closest("#sfo-reload")) { state.sfOnly = null; sfsOnlyLoad(true); }
+  if (e.target.closest("#sfo-csv")) {
+    const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = (state.sfOnlyVisible || []).map(({ r, s, star }) => [r.name, r.plz, r.ort, r.strasse, r.status, s.txt + (star ? " ★" : ""), r.letzter_kontakt || (s.ohne ? "ohne" : ""), r.opps ?? "", r.vg ?? "", r.owner || "", r.url || ""]);
+    const head = ["Firma", "PLZ", "Ort", "Straße", "Firmenstatus", "Frei", "Letzter Kontakt", "Opportunities", "Vertriebsgesellschaften", "Inhaber", "Link"];
+    download(`nur_in_salesforce_${new Date().toISOString().slice(0, 10)}.csv`, "\ufeff" + [head, ...rows].map((r) => r.map(q).join(";")).join("\r\n"), "text/csv;charset=utf-8");
+  }
+});
