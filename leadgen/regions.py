@@ -13,6 +13,7 @@ REGIERUNGSBEZIRKE = {
 }
 
 # (AGS, Anzeigename, OSM-Name, Typ, wichtige Orte)
+# Nicht im Vertriebsgebiet (daher nicht erfasst): Heidelberg, Mannheim, Rhein-Neckar-Kreis
 _KREISE = [
     ("08111", "Stuttgart (Stadtkreis)", "Stuttgart", "Stadtkreis", ["Stuttgart"]),
     ("08115", "Landkreis Böblingen", "Landkreis Böblingen", "Landkreis", ["Böblingen", "Sindelfingen", "Leonberg", "Herrenberg"]),
@@ -31,10 +32,7 @@ _KREISE = [
     ("08212", "Karlsruhe (Stadtkreis)", "Karlsruhe", "Stadtkreis", ["Karlsruhe"]),
     ("08215", "Landkreis Karlsruhe", "Landkreis Karlsruhe", "Landkreis", ["Bruchsal", "Ettlingen", "Bretten", "Stutensee"]),
     ("08216", "Landkreis Rastatt", "Landkreis Rastatt", "Landkreis", ["Rastatt", "Gaggenau", "Bühl"]),
-    ("08221", "Heidelberg (Stadtkreis)", "Heidelberg", "Stadtkreis", ["Heidelberg"]),
-    ("08222", "Mannheim (Stadtkreis)", "Mannheim", "Stadtkreis", ["Mannheim"]),
     ("08225", "Neckar-Odenwald-Kreis", "Neckar-Odenwald-Kreis", "Landkreis", ["Mosbach", "Buchen"]),
-    ("08226", "Rhein-Neckar-Kreis", "Rhein-Neckar-Kreis", "Landkreis", ["Weinheim", "Sinsheim", "Wiesloch", "Leimen", "Schwetzingen"]),
     ("08231", "Pforzheim (Stadtkreis)", "Pforzheim", "Stadtkreis", ["Pforzheim"]),
     ("08235", "Landkreis Calw", "Landkreis Calw", "Landkreis", ["Calw", "Nagold", "Bad Wildbad"]),
     ("08236", "Enzkreis", "Enzkreis", "Landkreis", ["Mühlacker", "Neuenbürg", "Remchingen"]),

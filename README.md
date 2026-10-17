@@ -2,7 +2,7 @@
 
 Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-Württemberg**.
 
-- **Firmensuche** – alle 44 Stadt- und Landkreise, rund 95 Unterbranchen in 19 Hauptbranchen (z. B. Bau & Handwerk → Bad, Sanitär & Heizung), aufklappbar und mit Anzahl je Kreis. Quellen: OpenStreetMap und Overture Maps (u. a. Handwerksbetriebe ohne Ladengeschäft), Dubletten werden zusammengeführt; unsichere Einträge lassen sich zuschalten.
+- **Firmensuche** – alle 41 Stadt- und Landkreise des Gebiets (Baden-Württemberg ohne Heidelberg, Mannheim und Rhein-Neckar-Kreis), rund 95 Unterbranchen in 19 Hauptbranchen (z. B. Bau & Handwerk → Bad, Sanitär & Heizung), aufklappbar und mit Anzahl je Kreis. Quellen: OpenStreetMap und Overture Maps (u. a. Handwerksbetriebe ohne Ladengeschäft), Dubletten werden zusammengeführt; unsichere Einträge lassen sich zuschalten.
 - **Neugründungen** – findet automatisch Betriebe, die neu eröffnet haben oder neu eingetragen wurden
 - **News-Radar** – aktuelle Meldungen zu Neueröffnungen, Gründungen, Start-ups und neuen Standorten je Kreis
 - **Werbepotenzial-Score** (0–100) – priorisiert nach Branche, Neueröffnung und Erreichbarkeit; Ketten werden abgewertet (Marketing läuft dort zentral)
@@ -24,7 +24,7 @@ Vertriebstool zur Neukundensuche für Werbung (Außenwerbung / DOOH) in **Baden-
 
 **https://markus90ms-eng.github.io/Leadgenerator/**
 
-Einfach im Browser öffnen. Die Daten für alle 44 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) und dem offenen Overture-Maps-Datensatz „places“ (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
+Einfach im Browser öffnen. Die Daten für alle 41 Kreise sammelt GitHub Actions automatisch jeden Morgen aus dem aktuellen OpenStreetMap-Abzug (Geofabrik) und dem offenen Overture-Maps-Datensatz „places“ (`.github/workflows/pages.yml`). Manuell aktualisieren: Reiter *Actions* → *Daten sammeln & Webseite veröffentlichen* → *Run workflow*.
 
 Status und Notizen der Pipeline werden im Browser gespeichert; über *Meine Pipeline → Sicherung speichern* lassen sie sich als Datei sichern.
 
@@ -80,3 +80,4 @@ python -m unittest discover -s tests
 - **Knopfleiste unter jedem Betrieb**: Pitch · Mail | Karte · Google · North Data · Jobs | Ausblenden.
 - **Filterleiste**: jeder Bereich lässt sich auf- und zuklappen („alle auf · alle zu“); ein Punkt zeigt, wo ein Filter aktiv ist.
 - **Eigene Leads ↔ Firmensuche**: Beim Öffnen von „Eigene Leads“ wird jeder eigene Lead mit der Firmensuche abgeglichen (Telefon, Website, E-Mail oder Name + PLZ). Bei einem Treffer kommen die aktuellen Daten dazu (Kontakt, Branche, Website-Check, Impressum, Gruppe, Ströer-Flächen), Foto und erkannter Text bleiben. Status und Notiz gelten für beide Einträge; in der Firmensuche zeigt „📷 Eigener Lead“, dass der Betrieb schon da ist.
+- **★ Sterne in allen Kreisen** (Filter „Salesforce“): zeigt alle Betriebe, deren Salesforce-Account laut Bestandsscan einen Stern hat (frei + Opportunities/Vertriebsgesellschaft), aus allen Kreisen in einer Liste. Geladen werden nur die Kreise, in denen solche Accounts liegen.

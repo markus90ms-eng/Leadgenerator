@@ -20,19 +20,37 @@ function sfsAddr(a) {
   return { plz, key, nr };
 }
 
+// Lokales Programm (salesforce-bot/server.py) liefert den Bestandsscan
+const SFS_API = "http://127.0.0.1:8766";
+async function sfsCall(path) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch(SFS_API + path, { signal: ctl.signal, cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sfsApply(d) {
+  sfs.rows = d.rows || [];
+  sfs.idx = {};
+  sfs.cache = {};
+  for (const r of sfs.rows) {
+    const a = sfsAddr(`${r.strasse || ""}, ${r.plz || ""}`);
+    if (!a.plz || !a.key) continue;
+    (sfs.idx[a.plz] ||= []).push({ r, a, t: sfsTokens(r.name) });
+  }
+  sfs.loadedAt = Date.now();
+}
+
 function sfsLoad(force) {
   if (sfs.loading || (!force && Date.now() - sfs.loadedAt < 60000)) return;
   sfs.loading = true;
-  sfcCall("/scan").then((d) => {
-    sfs.rows = d.rows || [];
-    sfs.idx = {};
-    sfs.cache = {};
-    for (const r of sfs.rows) {
-      const a = sfsAddr(`${r.strasse || ""}, ${r.plz || ""}`);
-      if (!a.plz || !a.key) continue;
-      (sfs.idx[a.plz] ||= []).push({ r, a, t: sfsTokens(r.name) });
-    }
-    sfs.loadedAt = Date.now();
+  sfsCall("/scan").then((d) => {
+    sfsApply(d);
     render();
   }).catch(() => { sfs.loadedAt = Date.now(); }).finally(() => { sfs.loading = false; });
 }
@@ -119,5 +137,63 @@ document.addEventListener("click", (e) => {
   render();
 });
 document.addEventListener("change", (e) => { if (e.target.closest("#sfs-filter")) { state.limit = 200; render(); } });
+
+// ---------- Stern-Betriebe aus allen Kreisen ---------------------------------
+// Firmensuche zeigt dann nur Betriebe, deren Salesforce-Account einen Stern hat
+// (frei + Opportunities/Vertriebsgesellschaft) – geladen werden nur die Kreise,
+// in denen solche Accounts liegen; übrige Betriebe werden nicht behalten.
+state.starView = null;
+const sfsStar = (m) => !!m && sfsState(m).c === "g" && sfsAttr(m.acc);
+
+async function sfsShowStars() {
+  if (state.starBusy) return;
+  state.starBusy = true;
+  try {
+    if (!sfs.rows) {
+      message("Lade den Salesforce-Bestandsscan …", true);
+      sfsApply(await sfsCall("/scan"));
+    }
+    if (state.starCache?.scanAt === sfs.loadedAt) { state.starView = state.starCache; message(""); return; }
+    const accs = sfs.rows.filter((r) => sfsStar({ acc: r }));
+    if (!accs.length) return message("Im Bestandsscan gibt es keine Accounts mit Stern.");
+    const meta = await getSearchMeta();
+    const plzs = new Set(accs.map((r) => String(r.plz || "").trim()).filter(Boolean));
+    const valid = new Set(state.meta.kreise.map((k) => k.ags));
+    const queue = [...new Set([...plzs].map((p) => meta.plz?.[p]?.[0]).filter((a) => valid.has(a)))];
+    const total = queue.length, rows = [];
+    let done = 0;
+    message(`★ Suche Stern-Betriebe in ${total} Kreisen …`, true);
+    const work = async () => {
+      while (queue.length) {
+        const ags = queue.shift();
+        const [companies] = await Promise.all([
+          state.kreisData[ags] ? Promise.resolve(state.kreisData[ags]) : getJson(`data/kreis/${ags}.json`).catch(() => ({ leads: [] })),
+          state.stroeerData[ags] ? null : getJson(`data/stroeer/${ags}.json`).catch(() => ({ items: [] })).then((d) => { state.stroeerData[ags] = d; }),
+        ]);
+        for (const l of companies.leads || []) {
+          if (!plzs.has((l.address || "").match(/\b(\d{5})\b/)?.[1])) continue;
+          if (sfsStar(sfsMatch(l))) rows.push({ ...l, kreis: ags });
+        }
+        done++;
+        message(`★ Suche Stern-Betriebe: ${done} von ${total} Kreisen …`, true);
+      }
+    };
+    await Promise.all([work(), work(), work()]);
+    state.starView = state.starCache = { rows, scanAt: sfs.loadedAt, accs: accs.length };
+    message("");
+  } catch (e) {
+    message(`Stern-Suche nicht möglich: ${e.message}. Läuft das Salesforce-Programm mit dem Bestandsscan auf deinem Rechner?`);
+  } finally {
+    state.starBusy = false;
+    state.nearIndex = null;
+    state.limit = 200;
+    render();
+  }
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#sfs-stars")) { e.preventDefault(); if (state.tab !== "search") switchTab("search"); sfsShowStars(); }
+  if (e.target.closest("#star-exit")) { e.preventDefault(); state.starView = null; state.limit = 200; render(); }
+});
 window.addEventListener("focus", () => sfsLoad());
 window.addEventListener("load", () => sfsLoad(true));

@@ -133,9 +133,9 @@ class StroeerTest(unittest.TestCase):
 
 
 class RegionsTest(unittest.TestCase):
-    def test_all_44_kreise(self):
-        self.assertEqual(len(KREISE), 44)
-        self.assertEqual(sum(k["typ"] == "Stadtkreis" for k in KREISE.values()), 9)
+    def test_all_kreise_im_gebiet(self):
+        self.assertEqual(len(KREISE), 41)  # BW ohne Heidelberg, Mannheim, Rhein-Neckar-Kreis
+        self.assertEqual(sum(k["typ"] == "Stadtkreis" for k in KREISE.values()), 7)
 
 
 class OverpassTest(unittest.TestCase):
@@ -414,7 +414,7 @@ class ServerTest(unittest.TestCase):
         base = f"http://127.0.0.1:{server.server_address[1]}"
         try:
             meta = json.load(urllib.request.urlopen(base + "/api/meta"))
-            self.assertEqual(len(meta["kreise"]), 44)
+            self.assertEqual(len(meta["kreise"]), 41)
             self.assertIn("<title>Leadgenerator BW</title>", urllib.request.urlopen(base + "/").read().decode())
             with mock.patch.object(overpass, "run_query", return_value=OVERPASS_RESPONSE):
                 leads = json.load(urllib.request.urlopen(base + "/api/search?kreis=08115&cats=restaurant,imbiss"))
