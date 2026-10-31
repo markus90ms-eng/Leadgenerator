@@ -203,7 +203,7 @@ window.addEventListener("load", () => sfsLoad(true));
 // Accounts aus dem Bestandsscan, zu denen es in der Firmensuche keinen Betrieb gibt. Abgleich gegen die Kreise,
 // in denen die PLZ der Accounts liegen (Kreise werden dafür geladen, übrige Betriebe nicht behalten).
 state.sfOnly = null;
-state.sfOnlyUi = { st: "", text: "", limit: 300 };
+state.sfOnlyUi = { st: "", text: "", kreis: "", limit: 300 };
 
 async function sfsOnlyLoad(force) {
   if (state.sfOnlyBusy) return;
@@ -212,7 +212,7 @@ async function sfsOnlyLoad(force) {
   try {
     if (force || !sfs.rows) {
       message("Lade den Salesforce-Bestandsscan …", true);
-      sfsApply(await sfcCall("/scan"));
+      sfsApply(await sfsCall("/scan"));
     }
     if (!force && state.sfOnly?.scanAt === sfs.loadedAt) { message(""); return; }
     const meta = await getSearchMeta();
@@ -237,6 +237,7 @@ async function sfsOnlyLoad(force) {
     };
     await Promise.all([work(), work(), work()]);
     const rows = sfs.rows.filter((r) => !matched.has(r) && r.land_de !== false);
+    for (const r of rows) r._ags = meta.plz?.[String(r.plz || "").trim()]?.[0] || "";
     state.sfOnly = { rows, scanAt: sfs.loadedAt, total: sfs.rows.length, matched: matched.size, kreise: total };
     message("");
   } catch (e) {
@@ -256,6 +257,7 @@ function sfsOnlyList() {
   for (const r of state.sfOnly.rows) {
     const s = sfsState({ acc: r });
     if (want && !want.includes(s.c)) continue;
+    if (ui.kreis && r._ags !== ui.kreis) continue;
     if (ui.st === "stern" && !sfsAttr(r)) continue;
     if (text.length && !text.some((t) => (/^\d+$/.test(t) ? String(r.plz || "").startsWith(t) : `${r.ort} ${r.name} ${r.strasse}`.toLowerCase().includes(t)))) continue;
     out.push({ r, s, star: s.c === "g" && sfsAttr(r) });
@@ -271,7 +273,7 @@ function sfsOnlyTable() {
   const rows = list.slice(0, ui.limit).map(({ r, s, star }) => `<tr>
     <td><button class="sfs-dot ${s.c}${star ? " star" : ""}" title="${esc(s.txt)}" disabled style="opacity:1;cursor:default">S${star ? "<i>★</i>" : ""}</button></td>
     <td class="name">${esc(r.name)}<div class="sub">${esc(r.status || "")}${r.sperre ? " · Kontaktsperre" : ""}</div></td>
-    <td>${esc(r.plz)} ${esc(r.ort)}<div class="sub">${esc(r.strasse)}</div></td>
+    <td>${esc(r.plz)} ${esc(r.ort)}<div class="sub">${esc(r.strasse)}${r._ags ? " · " + esc(kreisName(r._ags)) : ""}</div></td>
     <td>${s.ohne ? "<b>ohne</b>" : r.letzter_kontakt ? `<b>${esc(fmtDate(r.letzter_kontakt))}</b>` : `<span class="sub">${esc(s.txt)}</span>`}${s.offen ? `<div class="sub">offene Aufgabe ${esc(r.offen.join(", "))}</div>` : ""}</td>
     <td>${sfsAttr(r) ? `<b>${esc(sfsAttrTxt(r))}</b>` : `<span class="sub">–</span>`}</td>
     <td>${esc(r.owner || "")}</td>
@@ -291,30 +293,29 @@ function sfsOnlyRender() {
   }
   const ui = state.sfOnlyUi;
   if (!$("#sfo-table")) {
-    $("#results").innerHTML = `<div class="sfo-bar">
-      <label for="sfo-st">Salesforce</label>
-      <select id="sfo-st">
-        <option value="">alle</option>
-        <option value="frei">frei: letzter Kontakt über 3 Monate oder ohne</option>
-        <option value="stern">★ frei und mit Opportunities/Vertriebsgesellschaft</option>
-        <option value="kuerzlich">kürzlich kontaktiert / offene Aufgabe</option>
-        <option value="gesperrt">gesperrt</option>
-        <option value="unklar">Kontaktdatum noch nicht gelesen</option>
-      </select>
-      <input type="search" id="sfo-text" placeholder="PLZ, Ort, Name, Straße …">
-      <button id="sfo-csv">CSV-Export</button>
-    </div><div id="sfo-table"></div>`;
-    $("#sfo-st").value = ui.st;
-    $("#sfo-text").value = ui.text;
+    $("#results").innerHTML = `<div class="sfo-bar"><button id="sfo-csv">CSV-Export</button></div><div id="sfo-table"></div>`;
+  }
+  const sel = $("#sfo-kreis");
+  if (sel && sel.options.length <= 1) {  // Kreise wie in der Firmensuche, nach Regierungsbezirk
+    const groups = {};
+    for (const k of state.meta.kreise) (groups[k.bezirk] ||= []).push(k);
+    for (const [bezirk, kreise] of Object.entries(groups)) {
+      const og = document.createElement("optgroup");
+      og.label = bezirk;
+      for (const k of kreise) og.append(new Option(k.name, k.ags));
+      sel.append(og);
+    }
+    sel.value = ui.kreis;
   }
   sfsOnlyTable();
 }
 
 document.addEventListener("input", (e) => {
-  if (e.target.id === "sfo-text") { state.sfOnlyUi.text = e.target.value; state.sfOnlyUi.limit = 300; sfsOnlyTable(); }
+  if (e.target.id === "sfo-text") { state.sfOnlyUi.text = e.target.value; state.sfOnlyUi.limit = 300; if (state.sfOnly) sfsOnlyTable(); }
 });
 document.addEventListener("change", (e) => {
-  if (e.target.id === "sfo-st") { state.sfOnlyUi.st = e.target.value; state.sfOnlyUi.limit = 300; sfsOnlyTable(); }
+  if (e.target.id === "sfo-st") { state.sfOnlyUi.st = e.target.value; state.sfOnlyUi.limit = 300; if (state.sfOnly) sfsOnlyTable(); }
+  if (e.target.id === "sfo-kreis") { state.sfOnlyUi.kreis = e.target.value; state.sfOnlyUi.limit = 300; if (state.sfOnly) sfsOnlyTable(); }
 });
 document.addEventListener("click", (e) => {
   if (e.target.closest("#sfo-more")) { state.sfOnlyUi.limit += 300; sfsOnlyTable(); }

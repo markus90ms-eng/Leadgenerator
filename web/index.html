@@ -31,6 +31,24 @@
       <button id="sfo-reload">Neu abgleichen</button>
     </section>
 
+    <section class="only-sfonly" data-fold="sfo-filter">
+      <label>Filter</label>
+      <label class="small" for="sfo-kreis">Stadt-/Landkreis</label>
+      <select id="sfo-kreis"><option value="">alle Kreise</option></select>
+      <label class="small" for="sfo-text">PLZ, Ort, Name oder Straße</label>
+      <input type="search" id="sfo-text" placeholder="z. B. 70, 71032 oder Böblingen">
+      <p class="hint">Mehrere mit Komma trennen. Eine Zahl sucht nach dem PLZ-Anfang: „70“ = alle PLZ 70…, „71032“ = genau diese PLZ.</p>
+      <label class="small" for="sfo-st">Salesforce</label>
+      <select id="sfo-st">
+        <option value="">alle</option>
+        <option value="frei">frei: letzter Kontakt über 3 Monate oder ohne</option>
+        <option value="stern">★ frei und mit Opportunities/Vertriebsgesellschaft</option>
+        <option value="kuerzlich">kürzlich kontaktiert / offene Aufgabe</option>
+        <option value="gesperrt">gesperrt</option>
+        <option value="unklar">Kontaktdatum noch nicht gelesen</option>
+      </select>
+    </section>
+
     <section class="only-eigene" data-fold="fotos">
       <label>Fotos hinzufügen</label>
       <label class="photo-drop" id="photo-drop" for="photo-input">
