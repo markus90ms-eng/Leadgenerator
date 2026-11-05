@@ -2,7 +2,7 @@
 
 **Quelle:** „So profitierst du von Deutschlands Absturz“, Podcast {ungeskriptet} by Ben (Gast: Matthias Beerbaum), 3 Std. 43 Min.
 **Link:** https://www.youtube.com/watch?v=ohHNqhi52VQ
-**Ausgewertet:** Abschnitt ca. 1:54:00 bis 2:48:00 (Praxisteil) sowie 1:06:00 bis 1:36:00 (Einstieg, Fehler, Learnings). Zeitstempel in Klammern, Format Std:Min:Sek.
+**Ausgewertet:** Abschnitt ca. 1:54:00 bis 2:48:00 (Praxisteil), 1:06:00 bis 1:36:00 (Einstieg, Fehler, Learnings) sowie 3:07:30 bis 3:15:30 (Steuern und Struktur). Zeitstempel in Klammern, Format Std:Min:Sek.
 
 > **Wichtige Hinweise**
 > - Alle Zahlen und Aussagen stammen vom Gast (Matthias Beerbaum), nicht von mir. Ich habe sie nicht überprüft.
@@ -92,6 +92,39 @@ Danach packt er nach eigener Aussage 98 bis 99 % der Objekte weg. Die große Kun
 - Mieten nicht dauerhaft zu niedrig lassen, sonst fehlt Geld für Instandhaltung und Zinsen (2:02:30 bis 2:03:00).
 - Langfristige Mietverträge mit solventen Mietern (z. B. Behörden) erhöhen den Objektwert. Der Gast nennt ein Beispiel, bei dem ein neuer Mietvertrag den Wert eines Turms ca. verzweieinhalbfachte (1:52:00 bis 1:52:30).
 
+### Exkurs: Steuern und Struktur (3:07:30 bis 3:14:30)
+
+> Das Transkript trennt die Sprecher nicht sauber. Aussagen sind daher dem „Gespräch“ zugeordnet. Der Gast vertritt eine klare Meinung zu Steuern, die nicht jeder teilen muss. Steuerrecht ändert sich, hole dir für eigene Entscheidungen einen Steuerberater.
+
+**a) Hebel statt Sparen (3:08:01)**
+- Aktien brauchen meist bereits versteuertes Kapital: 100.000 € im Depot sind 100.000 €. Selbst bei 100 % Rendite (laut Gast „utopisch viel“) wären es 200.000 €.
+- Mit 100.000 € Eigenkapital lassen sich laut Gast „ganz easy“ 1,5 bis 2 Mio. € Fremdkapital hebeln. Das Gespräch nennt das „steuerbegünstigt“.
+
+**b) Privat investieren (3:09:30 bis 3:11:31)**
+- Privatinvestoren mit wenigen Objekten sparen anfangs Steuern durch **Abschreibung (AfA)**, genannt wird auch eine **Sonder-AfA** über vier Jahre (3:10:00).
+- Der Effekt gilt laut Gast nur am Anfang: Die Sonder-AfA nutzt sich ab, und irgendwann zahlst du Steuern. Seine Lebensweisheit: **„Am versteuerten Gewinn ist noch keiner pleitegegangen.“** (3:10:00)
+- Es gilt eine **10-jährige Spekulationsfrist**: Wer nach zehn Jahren verkauft, zahlt auf den Gewinn keine Steuer. In den zehn Jahren musst du die Mieten aber zum persönlichen Steuersatz versteuern, im Regelfall zum Spitzensteuersatz. Genannt werden „vielleicht 46, 48 %“ (3:11:00).
+- Der Gast hält es für sicher, dass dieser Steuervorteil abgeschafft wird. Das ist seine Einschätzung und im Gespräch nicht belegt. Prüfe den aktuellen Stand selbst.
+
+**c) Holding mit Objektgesellschaften (3:10:31 bis 3:13:30)**
+- Der Gast arbeitet mit einer **Holding-GmbH** und darunter mit **Objekt-GmbHs** („wie bei einem Oktopus“, 3:13:00). Die Holding sammelt das Geld, jede Tochter hält ein Objekt.
+- Er nennt **15 % Körperschaftsteuer** und erwähnt, dass der Satz in den nächsten Jahren sinken soll. Der neue Wert ist im Transkript nicht lesbar.
+- Gewinne von einer Objektgesellschaft nach oben zur Holding schieben koste laut Gast nur **ca. 1,5 % Steuer**. Mit dem Geld gründet die Holding eine neue Tochter und gibt ihr ein **Darlehen**. Mit diesem Geld geht die Tochter zur Bank (Beispiel: 100.000 € Gewinn werden als Darlehen weitergegeben, dann will die Gesellschaft 1 Mio. € finanzieren) (3:13:00 bis 3:13:30).
+- Privat musst du Gewinne dagegen jedes Jahr versteuern und kannst sie nicht steuerarm weiterschieben (3:12:30).
+- Behauptung des Gasts: In zehn Jahren habe er durch die niedrigere Steuer „dreieinhalb“-mal mehr Objekte gekauft als jemand, der auf die Steuerfreiheit nach zehn Jahren wartet (3:11:31). Eine Rechnung dazu gibt es im Video nicht.
+- **Nachteile:** Bilanz erstellen, Zahlen veröffentlichen (Offenlegung, alle können sie einsehen), zusätzliche Kosten (3:12:00 bis 3:12:30).
+- **Ab wann sinnvoll:** im Gespräch genannt ab ca. 10 Wohnungen bzw. 50.000 bis 60.000 € Jahresmieteinnahmen (3:13:30 bis 3:14:01).
+
+**d) Der „Kopf-Hebel“ (3:14:01 bis 3:14:30)**
+- Wichtiger als die Steuer sei laut Gast die Wirkung nach außen: Mit eigener Immobiliengesellschaft („Ben Ungeskriptet GmbH“) fragst du bei Maklern, Insolvenzverwaltern und Banken anders an. Bei der Bank landest du beim Abteilungsleiter oder Vorstand statt am Schalter. Auch du selbst willst die Gesellschaft „füllen“ und Objekte kaufen.
+
+**e) Kleiner Tipp am Rand (2:57:00):** Eintritt zu Network-Events und Afterwork-Partys sei steuerlich absetzbar (Aussage des Gasts, nicht geprüft).
+
+**f) Schlusssatz des Gasts (3:15:30):** Auf dem Post-it stünde „Einfach machen, fang an.“
+
+**Vereinfachtes Zahlenbeispiel (nur zur Veranschaulichung, abgeleitet aus den genannten Sätzen):**
+Bleiben 100.000 € Gewinn übrig, wären das bei ca. 46 bis 48 % persönlichem Steuersatz rund 46.000 bis 48.000 € Steuer, bei 15 % Körperschaftsteuer rund 15.000 €. Weitere Steuern (z. B. Gewerbesteuer, Solidaritätszuschlag) und Kosten der Struktur sind hier nicht berücksichtigt. Das Video rechnet das nicht vor, daher sind das nur Größenordnungen.
+
 ---
 
 ## 3. Fehler und Learnings aus dem Video
@@ -124,8 +157,13 @@ Danach packt er nach eigener Aussage 98 bis 99 % der Objekte weg. Die große Kun
 4. **Praxis diese Woche:** Rufe drei Makler an und stelle dich in 30 Sekunden vor (Wer bin ich, Suchprofil, Mindestrendite, Preisrahmen).
 5. **Risiko:** Welche zwei Sicherheitsregeln würdest du aus dem Bauträger-Fall für eigene Käufe ableiten?
 
+6. **Steuern:** Nenne zwei Vorteile und zwei Nachteile einer Holding mit Objektgesellschaften laut Video.
+   (Lösung: Vorteile u. a. niedrigerer Steuersatz von ca. 15 % statt ca. 46 bis 48 %, Gewinne lassen sich für ca. 1,5 % Steuer weiterschieben, besseres Auftreten bei Bank und Makler. Nachteile: Bilanz und Offenlegung, zusätzliche Kosten, erst ab ca. 10 Wohnungen sinnvoll.)
+
 ## 6. Kontrollfragen (Antworten oben im Text)
 
+- Was gilt privat nach der 10-jährigen Spekulationsfrist, und was musst du in dieser Zeit mit den Mieten tun?
+- Warum nennt der Gast den „Kopf-Hebel“ wichtiger als die Steuer?
 - Warum kauft der Gast keine Objekte mehr über Portale?
 - Was bedeutet Ist-Miete vs. Soll-Miete?
 - Wie funktioniert ein Verkäuferdarlehen, und warum stimmen Verkäufer zu?
@@ -135,5 +173,6 @@ Danach packt er nach eigener Aussage 98 bis 99 % der Objekte weg. Die große Kun
 ## 7. Was in diesem Skript fehlt
 
 - Abschnitt 1:36 bis 1:54 habe ich nur stichwortartig durchgesehen (Gewerbeobjekte, Behördenmieter, Beispiel Bundesturm).
-- Abschnitt ab 2:48 habe ich nur stichwortartig geprüft. Dort kommen u. a. Steuerthemen (Holding/GmbH, ca. 15 % Körperschaftsteuer laut Gast, Haltefrist 10 Jahre) ab ca. 3:08:00 vor. Diese sind hier nicht im Detail aufbereitet.
+- Abschnitte 2:48 bis 3:07 und ab 3:15:30 habe ich nur stichwortartig geprüft. Sie behandeln überwiegend Persönliches, Netzwerk, Politik und Autos und sind für das Thema weniger relevant.
+- Der Steuerteil ist vollständig gelesen, aber die Sprecher sind im Transkript nicht getrennt. Zahlen wie „ab 10 Wohnungen“ oder der künftige Körperschaftsteuersatz sind teilweise unklar.
 - Das Video wurde nicht gesehen, nur das Transkript gelesen. Visuelle Inhalte (Einblendungen) fehlen.
