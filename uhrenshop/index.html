@@ -53,8 +53,8 @@
 <script src="common.js"></script>
 <script>
 function initPage(){
-  $("#heroArt").innerHTML = watchSVG({case:"#d9b04a",dial:"#14213d",strap:"#d9b04a",ind:"#f6e3a8",type:"bracelet",chrono:true});
-  $("#storyArt").innerHTML = watchSVG(byId(1).style);
+  $("#heroArt").innerHTML = media(byId(6));
+  $("#storyArt").innerHTML = media(byId(1));
   $("#featured").innerHTML = PRODUCTS.filter(p=>p.isNew).slice(0,4).map(card).join("");
   $("#brandTiles").innerHTML = BRANDS.map(b=>`<a class="brand-tile" href="kollektion.html#${b.slug}"><div><small>${b.city} · ${b.since}</small><h3 style="margin-top:10px">${b.name}</h3></div><div><p>${b.text.split(". ")[0]}.</p><span class="link">Ansehen</span></div></a>`).join("");
 }
