@@ -23,7 +23,7 @@ function draw(){
   const m=i=>n?media(p,i):media(p,0,{zoom:i===1});
   const rel=PRODUCTS.filter(x=>x.id!==p.id&&x.brand===p.brand).concat(PRODUCTS.filter(x=>x.brand!==p.brand)).slice(0,4);
   $("#detail").innerHTML=`<div class="crumbs" style="padding-top:34px"><a href="index.html">Start</a> / <a href="kollektion.html">Kollektion</a> / <a href="kollektion.html#${slug(p.brand)}">${p.brand}</a></div>
-  <div class="pd"><div class="gallery"><div class="stage">${m(shot)}</div><div class="thumbs">${shots.map(i=>`<button class="thumb ${i===shot?"on":""}" data-shot="${i}" aria-label="Ansicht ${i+1}">${m(i)}</button>`).join("")}</div></div>
+  <div class="pd"><div class="gallery"><div class="stage">${m(shot)}</div><div class="thumbs">${shots.map(i=>`<button class="thumb ${i===shot?"on":""}" data-shot="${i}" aria-label="Ansicht ${i+1}">${m(i)}</button>`).join("")}</div>${CREDITS[p.id]?`<p class="pd-note" style="margin-top:12px">Beispielfoto: ${esc(CREDITS[p.id].artist||"Unbekannt")}, <a class="link" style="font-size:10px" href="${esc(CREDITS[p.id].page)}" target="_blank" rel="noopener">${esc(CREDITS[p.id].license)}</a> via Wikimedia Commons. Abgebildet ist ein vergleichbares Modell.</p>`:""}</div>
   <div class="pd-info"><span class="brand">${p.brand}</span><h1>${p.name}</h1><div class="pd-price">${eur(p.price)}</div><span class="pd-note">inkl. Versand &amp; Versicherung · differenzbesteuert nach §25a UStG</span>
   <p class="pd-desc">${desc(p)}</p>
   <div class="pd-cta"><button class="btn solid" data-add="${p.id}">Zur Anfrage hinzufügen</button><button class="btn" id="ask">Frage zur Uhr</button></div>

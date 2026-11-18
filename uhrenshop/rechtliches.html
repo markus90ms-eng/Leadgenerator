@@ -16,6 +16,8 @@
 <h2 id="impressum">Impressum</h2><p>Platzhalter: Firmenname, Anschrift, Vertretungsberechtigte, Kontakt, Handelsregister und USt-IdNr. gemäß § 5 DDG.</p>
 <h2 id="datenschutz">Datenschutz</h2><p>Platzhalter: Datenschutzerklärung gemäß DSGVO. Diese Demo speichert Merk- und Anfrageliste ausschließlich lokal im Browser. Schriftarten werden von Google Fonts geladen.</p>
 <h2 id="agb">AGB &amp; Widerruf</h2><p>Platzhalter: Allgemeine Geschäftsbedingungen und Widerrufsbelehrung.</p>
+<h2 id="bildnachweis">Bildnachweis</h2><p>Die Beispielfotos stammen von Wikimedia Commons und stehen unter den genannten freien Lizenzen. Sie zeigen teils vergleichbare Modelle.</p><ul id="credits"></ul>
 </div></section></main>
 <script src="common.js"></script>
+<script>function initPage(){$("#credits").innerHTML=Object.entries(CREDITS).map(([id,c])=>`<li>${esc(byId(+id).brand+" "+byId(+id).name)}: „${esc(c.title)}“ von ${esc(c.artist||"Unbekannt")}, <a class="link" style="font-size:10px" href="${esc(c.licenseUrl||c.page)}" target="_blank" rel="noopener">${esc(c.license)}</a> (<a class="link" style="font-size:10px" href="${esc(c.page)}" target="_blank" rel="noopener">Quelle</a>)</li>`).join("")||"<li>Aktuell werden keine fremden Fotos verwendet.</li>";}</script>
 </body></html>

@@ -23,6 +23,9 @@ const PRODUCTS = [
   {id:12, brand:"Richard Mille", name:"RM 030 Titan", ref:"RM030 Ti", year:2014, price:145990, material:"Titan", dial:"Skelett", size:"50 mm", movement:"Automatik", set:"RM-Service 08/26", cond:"Sehr gut", style:{case:"#8e949c",dial:"#2b2f36",strap:"#e8e8e8",ind:"#fff",type:"strap",skeleton:true}}
 ];
 
+/*CREDITS*/const CREDITS = {};
+PRODUCTS.forEach(p => { if (CREDITS[p.id]) p.photos = 1; });
+
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 const eur = n => new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
