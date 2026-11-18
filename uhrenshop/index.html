@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHRONOS &amp; CO. – Exklusive Luxusuhren</title>
+<meta name="description" content="Exklusive Luxusuhren von Rolex, Patek Philippe, Audemars Piguet und Richard Mille – geprüft, versichert, mit Echtheitsgarantie.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="topbar">Versicherter Versand · 14 Tage Rückgaberecht · Echtheitsgarantie auf jede Uhr</div>
+
+<header class="header" id="top">
+  <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menü">☰</button>
+  <a href="#top" class="logo">CHRONOS <span>&amp;</span> CO.</a>
+  <nav class="nav" id="nav">
+    <a href="#kollektion">Kollektion</a>
+    <a href="#marken">Marken</a>
+    <a href="#service">Service</a>
+    <a href="#kontakt">Kontakt</a>
+  </nav>
+  <div class="actions">
+    <button class="icon-btn" id="searchBtn" aria-label="Suche">⌕</button>
+    <button class="icon-btn" id="wishBtn" aria-label="Merkliste">♡<b class="badge" id="wishCount">0</b></button>
+    <button class="icon-btn" id="cartBtn" aria-label="Anfrageliste">▢<b class="badge" id="cartCount">0</b></button>
+  </div>
+</header>
+
+<div class="searchbar" id="searchbar">
+  <input type="search" id="searchInput" placeholder="Marke, Modell oder Referenznummer suchen …">
+</div>
+
+<section class="hero">
+  <div class="hero-text">
+    <p class="eyebrow">Seit Jahren Ihr Partner für Zeitmesser</p>
+    <h1>Uhren, die Geschichte schreiben.</h1>
+    <p class="lead">Handverlesene Rolex, Patek Philippe, Audemars Piguet und Richard Mille – jede Uhr unabhängig geprüft und mit Echtheitsgarantie.</p>
+    <div class="hero-cta">
+      <a class="btn primary" href="#kollektion">Kollektion entdecken</a>
+      <a class="btn" href="#kontakt">Persönliche Beratung</a>
+    </div>
+  </div>
+  <div class="hero-art" id="heroArt"></div>
+</section>
+
+<section class="marquee" id="marken" aria-label="Marken">
+  <div class="marquee-track">
+    <span>ROLEX</span><span>PATEK PHILIPPE</span><span>AUDEMARS PIGUET</span><span>RICHARD MILLE</span><span>OMEGA</span><span>CARTIER</span><span>VACHERON CONSTANTIN</span>
+    <span>ROLEX</span><span>PATEK PHILIPPE</span><span>AUDEMARS PIGUET</span><span>RICHARD MILLE</span><span>OMEGA</span><span>CARTIER</span><span>VACHERON CONSTANTIN</span>
+  </div>
+</section>
+
+<section class="section" id="kollektion">
+  <div class="section-head">
+    <p class="eyebrow">Kollektion</p>
+    <h2>Aktuell verfügbar</h2>
+  </div>
+  <div class="filters">
+    <div class="chips" id="brandChips"></div>
+    <div class="filter-right">
+      <select id="priceFilter" aria-label="Preis">
+        <option value="all">Alle Preise</option>
+        <option value="0-30000">bis 30.000 €</option>
+        <option value="30000-100000">30.000 – 100.000 €</option>
+        <option value="100000-9999999">ab 100.000 €</option>
+      </select>
+      <select id="sortSelect" aria-label="Sortierung">
+        <option value="new">Neueste zuerst</option>
+        <option value="asc">Preis aufsteigend</option>
+        <option value="desc">Preis absteigend</option>
+      </select>
+    </div>
+  </div>
+  <p class="result-count" id="resultCount"></p>
+  <div class="grid" id="grid"></div>
+</section>
+
+<section class="usp" id="service">
+  <div><h3>Echtheitsgarantie</h3><p>Jede Uhr wird von unseren Uhrmachern geprüft und mit Zertifikat geliefert.</p></div>
+  <div><h3>Versichert &amp; diskret</h3><p>Vollversicherter Versand oder persönliche Übergabe in neutraler Verpackung.</p></div>
+  <div><h3>Box &amp; Papiere</h3><p>Vollsets sind klar gekennzeichnet. Zustand und Service-Historie transparent dokumentiert.</p></div>
+  <div><h3>14 Tage Rückgabe</h3><p>Wenn die Uhr nicht passt, nehmen wir sie zurück – ohne Wenn und Aber.</p></div>
+</section>
+
+<section class="section contact" id="kontakt">
+  <div class="contact-text">
+    <p class="eyebrow">Kontakt</p>
+    <h2>Ihre Wunschuhr ist nicht dabei?</h2>
+    <p>Wir beschaffen auf Anfrage nahezu jede Referenz. Schreiben Sie uns – Sie erhalten innerhalb eines Werktags eine persönliche Antwort.</p>
+    <ul class="contact-list">
+      <li>Telefon: +49 000 000000</li>
+      <li>E-Mail: info@example.com</li>
+      <li>Termine nach Vereinbarung</li>
+    </ul>
+  </div>
+  <form class="form" id="contactForm">
+    <label>Name<input name="name" required></label>
+    <label>E-Mail<input type="email" name="email" required></label>
+    <label>Nachricht<textarea name="msg" rows="5" id="msgField" placeholder="Welche Uhr suchen Sie?"></textarea></label>
+    <button class="btn primary" type="submit">Anfrage senden</button>
+    <p class="form-note" id="formNote" hidden>Danke! Ihre Anfrage wurde vorbereitet (Demo – bitte Backend anbinden).</p>
+  </form>
+</section>
+
+<section class="newsletter">
+  <h3>10 € Gutschein für Ihren Newsletter-Start</h3>
+  <form id="nlForm"><input type="email" placeholder="Ihre E-Mail-Adresse" required><button class="btn primary">Anmelden</button></form>
+</section>
+
+<footer class="footer">
+  <div class="logo">CHRONOS <span>&amp;</span> CO.</div>
+  <nav><a href="#kollektion">Kollektion</a><a href="#service">Service</a><a href="#kontakt">Kontakt</a><a href="#" data-modal="impressum">Impressum</a><a href="#" data-modal="datenschutz">Datenschutz</a></nav>
+  <p class="fine">Alle genannten Marken sind Eigentum ihrer jeweiligen Inhaber. Diese Seite ist unabhängig und steht in keiner Verbindung zu den Herstellern. Angezeigte Produkte und Preise sind Beispieldaten.</p>
+</footer>
+
+<div class="overlay" id="overlay"></div>
+
+<aside class="drawer" id="cartDrawer" aria-label="Anfrageliste">
+  <div class="drawer-head"><h3>Ihre Anfrage</h3><button class="icon-btn" data-close>✕</button></div>
+  <div class="drawer-body" id="cartBody"></div>
+  <div class="drawer-foot"><div class="total"><span>Summe</span><b id="cartTotal">0 €</b></div><button class="btn primary full" id="cartCheckout">Unverbindlich anfragen</button></div>
+</aside>
+
+<aside class="drawer" id="wishDrawer" aria-label="Merkliste">
+  <div class="drawer-head"><h3>Merkliste</h3><button class="icon-btn" data-close>✕</button></div>
+  <div class="drawer-body" id="wishBody"></div>
+</aside>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="modal-card" id="modalCard"></div></div>
+
+<script src="app.js"></script>
+</body>
+</html>
