@@ -19,7 +19,7 @@ function draw(){
   const p=cur;
   if(!p){$("#detail").innerHTML=`<div style="padding:120px 0;text-align:center"><h2>Uhr nicht gefunden</h2><p class="muted" style="margin:16px 0 30px">Vielleicht wurde sie bereits verkauft.</p><a class="btn" href="kollektion.html">Zur Kollektion</a></div>`;return;}
   document.title=`${p.brand} ${p.name} – ELYSION`;
-  const n=Math.max(p.photos||0,0), shots=n?Array.from({length:n},(_,i)=>i):[0,1];
+  const n=(PHOTO_URLS[p.id]||[]).length, shots=n?Array.from({length:n},(_,i)=>i):[0,1];
   const m=i=>n?media(p,i):media(p,0,{zoom:i===1});
   const rel=PRODUCTS.filter(x=>x.id!==p.id&&x.brand===p.brand).concat(PRODUCTS.filter(x=>x.brand!==p.brand)).slice(0,4);
   $("#detail").innerHTML=`<div class="crumbs" style="padding-top:34px"><a href="index.html">Start</a> / <a href="kollektion.html">Kollektion</a> / <a href="kollektion.html#${slug(p.brand)}">${p.brand}</a></div>
