@@ -70,9 +70,23 @@ function watchSVG(s, opts={}) {
     <circle cx="${cx}" cy="${cy}" r="3.2" fill="${hand}"/>
   </svg>`;
 }
-/* Foto oder Platzhalter */
+/* Echte Produktaufnahmen je Referenz; bei nicht verfügbarem Bild greift der SVG-Fallback. */
+const PHOTO_URLS = {
+  1:["https://patek-res.cloudinary.com/media/202099/51887"],
+  2:["https://chronexttime.imgix.net/V/4/V48236/V48236_1.png?ar=1%3A1&auto=compress&auto=format&bg=FFFFFF&fit=fill&fm=png&q=85&w=900"],
+  3:["https://cdn.vuahanghieu.com/unsafe/0x900/left/top/smart/filters%3Aquality%2890%29/https%3A/admin.vuahanghieu.com/upload/product/2024/02/dong-ho-nu-patek-philippe-7010r-013-mau-tim-65d6c47a08428-22022024105018.jpg"],
+  5:["https://www.jaztime.com/media/catalog/product/cache/be6cc9267cc77716448272b700c29484/a/u/audemars_piguet_code_11.59_selfwinding_stainless_steel_41mm_green_dial_15210st.oo.a056kb.01.jpg"],
+  6:["https://sothebys-md.brightspotcdn.com/dims4/default/0a1706b/2147483647/strip/true/crop/2000x2000%2B0%2B0/resize/1200x1200%21/quality/90/?url=http%3A%2F%2Fsothebys-brightspot.s3.amazonaws.com%2Fmedia-desk%2Fwebnative%2Fimages%2F3b%2F1a%2F73433a204e20b9b6c21c4680d9be%2Fhk1614-d8pp6-076-01-t1-01.jpg"],
+  7:["https://cdn.swisswatchexpo.com/productphotos/10/10/rolex-daytona-white-gold-meteorite-dial-chronograph-mens-watch-116509-74333_8696d.jpg"],
+  8:["https://timepiecetradingllc.com/cdn/shop/files/Untitleddesign-2025-01-24T040234.085.png?v=1737845751"],
+  9:["https://amsterdamvintagewatches.com/wp-content/uploads/2019/03/AVW-Rolex-Daytona-16520-1991-2-Side.jpg"],
+  10:["https://static.wixstatic.com/media/60a371_160a395d9fb5446e9f9edf10aadbb40d~mv2.jpg/v1/fill/w_900%2Ch_900%2Cal_c%2Cq_85%2Cenc_avif%2Cquality_auto/60a371_160a395d9fb5446e9f9edf10aadbb40d~mv2.jpg"],
+  11:["https://www.watchclub.com/upload/watches/originali/watch-club-rolex-milgauss-116400gv-box-and-certificate-ref-116400gv-year-2009-15213-wb.png11.jpg"],
+  12:["https://firstclasstimepieces.com/cdn/shop/products/rm30tit_500x.png?v=1603480239"]
+};
 function media(p, i=0, opts={}) {
-  if (p.photos && i < p.photos) return `<img class="photo" src="img/${p.id}-${i+1}.jpg" alt="${esc(p.brand+" "+p.name)}" loading="lazy">`;
+  const photos = PHOTO_URLS[p.id] || [];
+  if (photos[i]) return '<img class="photo" src="' + photos[i] + '" alt="' + esc(p.brand+" "+p.name) + '" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="photo-fallback" hidden>' + watchSVG(p.style, {zoom: !!opts.zoom}) + '</span>';
   return watchSVG(p.style, {zoom: !!opts.zoom});
 }
 
