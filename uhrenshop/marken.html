@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marken – ELYSION</title>
+<meta name="description" content="Rolex, Patek Philippe, Audemars Piguet und Richard Mille im Porträt.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+<section class="page-head"><div class="wrap"><div class="crumbs"><a href="index.html">Start</a> / Marken</div><p class="eyebrow">Marken</p><h1>Vier Häuser, ein Anspruch</h1><p>Wir konzentrieren uns auf Manufakturen, deren Uhren ihren Wert und ihre Faszination über Jahrzehnte behalten.</p></div></section>
+<div class="wrap" id="brandList"></div>
+</main>
+<script src="common.js"></script>
+<script>
+function initPage(){
+  $("#brandList").innerHTML=BRANDS.map((b,i)=>{const p=PRODUCTS.find(x=>slug(x.brand)===b.slug);const n=PRODUCTS.filter(x=>slug(x.brand)===b.slug).length;
+  return `<section class="section" style="border-bottom:1px solid var(--line)"><div class="split" style="${i%2?"direction:rtl":""}"><div class="frame" style="direction:ltr">${watchSVG(p.style)}</div><div style="direction:ltr"><p class="eyebrow">${b.city} · gegr. ${b.since}</p><h2 style="margin-top:12px">${b.name}</h2><div class="rule"></div><p>${b.text}</p><p style="margin:22px 0 28px"><span class="muted">${n} ${n===1?"Uhr":"Uhren"} aktuell verfügbar</span></p><a class="btn" href="kollektion.html#${b.slug}">${b.name} ansehen</a></div></div></section>`}).join("");
+}
+</script>
+</body></html>

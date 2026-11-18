@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uhr – ELYSION</title>
+<meta name="description" content="Detailansicht einer Luxusuhr.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap" id="detail"></main>
+<script src="common.js"></script>
+<script>
+let cur=null,shot=0;
+const desc=p=>`${p.brand} ${p.name} in ${p.material}, Zifferblatt ${p.dial.toLowerCase()}, Referenz ${p.ref}, Baujahr ${p.year}. Zustand: ${p.cond.toLowerCase()}. Lieferumfang: ${p.set}. Die Uhr wurde von unseren Uhrmachern geprüft und wird mit Echtheitszertifikat geliefert.`;
+function draw(){
+  const p=cur;
+  if(!p){$("#detail").innerHTML=`<div style="padding:120px 0;text-align:center"><h2>Uhr nicht gefunden</h2><p class="muted" style="margin:16px 0 30px">Vielleicht wurde sie bereits verkauft.</p><a class="btn" href="kollektion.html">Zur Kollektion</a></div>`;return;}
+  document.title=`${p.brand} ${p.name} – ELYSION`;
+  const n=Math.max(p.photos||0,0), shots=n?Array.from({length:n},(_,i)=>i):[0,1];
+  const m=i=>n?media(p,i):media(p,0,{zoom:i===1});
+  const rel=PRODUCTS.filter(x=>x.id!==p.id&&x.brand===p.brand).concat(PRODUCTS.filter(x=>x.brand!==p.brand)).slice(0,4);
+  $("#detail").innerHTML=`<div class="crumbs" style="padding-top:34px"><a href="index.html">Start</a> / <a href="kollektion.html">Kollektion</a> / <a href="kollektion.html#${slug(p.brand)}">${p.brand}</a></div>
+  <div class="pd"><div class="gallery"><div class="stage">${m(shot)}</div><div class="thumbs">${shots.map(i=>`<button class="thumb ${i===shot?"on":""}" data-shot="${i}" aria-label="Ansicht ${i+1}">${m(i)}</button>`).join("")}</div></div>
+  <div class="pd-info"><span class="brand">${p.brand}</span><h1>${p.name}</h1><div class="pd-price">${eur(p.price)}</div><span class="pd-note">inkl. Versand &amp; Versicherung · differenzbesteuert nach §25a UStG</span>
+  <p class="pd-desc">${desc(p)}</p>
+  <div class="pd-cta"><button class="btn solid" data-add="${p.id}">Zur Anfrage hinzufügen</button><button class="btn" id="ask">Frage zur Uhr</button></div>
+  <div class="specs"><div><span>Referenz</span><span>${p.ref}</span></div><div><span>Baujahr</span><span>${p.year}</span></div><div><span>Material</span><span>${p.material}</span></div><div><span>Zifferblatt</span><span>${p.dial}</span></div><div><span>Durchmesser</span><span>${p.size}</span></div><div><span>Werk</span><span>${p.movement}</span></div><div><span>Zustand</span><span>${p.cond}</span></div><div><span>Lieferumfang</span><span>${p.set}</span></div></div>
+  <div class="perks"><div><b>Echtheit</b>Zertifikat unserer Uhrmacher</div><div><b>Versand</b>Versichert und diskret</div><div><b>Rückgabe</b>14 Tage Widerruf</div><div><b>Beratung</b>Persönlich und kostenfrei</div></div>
+  <p style="margin-top:22px"><button class="heart ${wish.includes(p.id)?"on":""}" style="position:static;display:inline-flex;width:auto;gap:10px;font-size:11px;letter-spacing:.24em;text-transform:uppercase" data-wish="${p.id}">${ICON_HEART}<span>Merken</span></button></p></div></div>
+  <section style="padding-bottom:110px"><div class="sec-head"><div><p class="eyebrow">Das könnte Sie interessieren</p><h2>Ähnliche Uhren</h2></div></div><div class="grid">${rel.map(card).join("")}</div></section>`;
+  $("#ask").onclick=()=>{try{sessionStorage.setItem("el_msg",`Ich interessiere mich für: ${p.brand} ${p.name} (Ref. ${p.ref}).`);}catch{} location.href="kontakt.html";};
+  $$(".thumb").forEach(b=>b.onclick=()=>{shot=+b.dataset.shot;draw();});
+  renderLists();
+}
+function load(){const id=parseInt(location.hash.replace(/\D/g,""),10);cur=byId(id);shot=0;draw();window.scrollTo(0,0);}
+function initPage(){window.addEventListener("hashchange",load);load();}
+</script>
+</body></html>
